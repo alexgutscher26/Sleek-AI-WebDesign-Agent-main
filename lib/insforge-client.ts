@@ -1,7 +1,18 @@
 import { createClient } from '@insforge/sdk';
-import { getInsforgeAnonKey, getInsforgeBaseUrl } from './insforge-config';
+import { requireInsforgeConfig } from './insforge-config';
 
-export const insforge = createClient({
-  baseUrl: getInsforgeBaseUrl(),
-  anonKey: getInsforgeAnonKey()
-});
+let browserClient: ReturnType<typeof createClient> | null = null
+
+export function getInsforgeBrowserClient() {
+  if (browserClient) {
+    return browserClient
+  }
+
+  const config = requireInsforgeConfig("creating Insforge browser client")
+  browserClient = createClient({
+    baseUrl: config.baseUrl,
+    anonKey: config.anonKey
+  })
+
+  return browserClient
+}

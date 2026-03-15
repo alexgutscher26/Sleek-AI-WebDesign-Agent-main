@@ -22,6 +22,7 @@ import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
 import { DEFAULT_STYLE_INTENSITY } from "@/constants/style-intensity";
 import { createChatCompletionWithRetries, isAbortLikeError } from "@/lib/ai-retry";
 import { createHash } from "node:crypto";
+import { extractPrimaryHtml, sanitizeGeneratedHtml } from "@/lib/html-guardrails";
 
 class AbortError extends Error {
   constructor() {
@@ -217,6 +218,17 @@ const createRequestHash = (input: object) => (
     .update(JSON.stringify(input))
     .digest("hex")
 )
+
+const prepareGeneratedHtml = (rawHtml: string) => {
+  const extractedHtml = extractPrimaryHtml(rawHtml)
+  const sanitized = sanitizeGeneratedHtml(extractedHtml)
+
+  if (!sanitized.html) {
+    throw new Error("Generated HTML was empty after safety sanitization")
+  }
+
+  return sanitized.html
+}
 
 const parseAnalysisResult = (
   analysisText: string,
@@ -861,10 +873,7 @@ ${page.rootStyles}
       signal
     })
 
-    let htmlContent = result.choices[0].message.content ?? ""
-    const match = htmlContent.match(/<div[\s\S]*<\/div>/);
-    htmlContent = match ? match[0] : htmlContent;
-    htmlContent = htmlContent.replace(/```/g, "")
+    const htmlContent = prepareGeneratedHtml(result.choices[0]?.message?.content ?? "")
 
     const draft = {
       tempId: page.id,
@@ -1025,10 +1034,7 @@ async function runRegenerateWorker({
     signal
   });
 
-  let htmlContent = result.choices[0].message.content ?? "";
-  const match = htmlContent.match(/<div[\s\S]*<\/div>/);
-  htmlContent = match ? match[0] : htmlContent;
-  htmlContent = htmlContent.replace(/```/g, "");
+  const htmlContent = prepareGeneratedHtml(result.choices[0]?.message?.content ?? "");
 
   const summaryResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
     model: "google/gemini-2.5-flash-lite",
@@ -1098,7 +1104,16 @@ export async function POST(request: NextRequest) {
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
 
-    const lastMessage = messages[messages.length - 1]
+    const lastMessage = messages.at(-1)
+    if (!lastMessage) {
+      throw new RequestValidationError([
+        {
+          field: "messages",
+          message: "Messages must include at least one supported message."
+        }
+      ])
+    }
+
     const latestUserMessage = lastMessage.parts.find((part) => part.type === "text")?.text?.trim()
 
     if (!latestUserMessage) {
@@ -1195,7 +1210,8 @@ export async function POST(request: NextRequest) {
       .order("createdAt", { ascending: true })
       .limit(2)
 
-    const hasExistingPages = Boolean(existingPages && existingPages.length)
+    const existingPagesList = existingPages ?? []
+    const hasExistingPages = existingPagesList.length > 0
 
     const modelMessages = await convertModelMessages(messages.slice(10) as UIMessage[])
 
@@ -1374,7 +1390,7 @@ export async function POST(request: NextRequest) {
                               - Styles:${selectedPage.rootStyles}\n\n`
                           : ""}
         ${hasExistingPages && !isRegen
-                        ? `EXISTING PAGES (do NOT recreate):\n${existingPages!.map((page) => `- ${page.name}\n${page.rootStyles}`).join("\n")}\n\n`
+                        ? `EXISTING PAGES (do NOT recreate):\n${existingPagesList.map((page) => `- ${page.name}\n${page.rootStyles}`).join("\n")}\n\n`
                         : ""}
         USER REQUEST: "${latestUserMessage}"OUTPUT RAW JSON ONLY.`.trim()
                   }

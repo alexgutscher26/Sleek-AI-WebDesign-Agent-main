@@ -150,7 +150,7 @@ const InsforgeSetupWizard = ({ status }: { status: InsforgeSetupStatus }) => {
                 <div className="mt-3 space-y-2 text-sm text-muted-foreground">
                   <p><span className="font-medium text-foreground">Env file:</span> <code>.env</code></p>
                   <p><span className="font-medium text-foreground">Schema:</span> <code>insforge/schema.sql</code></p>
-                  <p><span className="font-medium text-foreground">Current base URL fallback:</span> <code>{status.baseUrl}</code></p>
+                  <p><span className="font-medium text-foreground">Current base URL:</span> <code>{status.baseUrl || "Not configured"}</code></p>
                 </div>
               </div>
 

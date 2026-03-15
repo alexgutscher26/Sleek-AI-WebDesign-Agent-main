@@ -29,12 +29,12 @@
 - [x] Prevent duplicate project creation race conditions
 - [x] Add idempotency token support for generation requests
 - [x] Add safe timeout handling for long-running generations
-- [ ] Add guardrails for empty/invalid `messages` arrays
-- [ ] Add strict null checks and remove critical runtime `any`
-- [ ] Block dangerous HTML/script patterns before rendering in iframe
-- [ ] Add secure defaults for all environment variables
-- [ ] Remove hardcoded production fallback base URL
-- [ ] Add boot-time config validation with fail-fast logging
+- [x] Add guardrails for empty/invalid `messages` arrays
+- [x] Add strict null checks and remove critical runtime `any`
+- [x] Block dangerous HTML/script patterns before rendering in iframe
+- [x] Add secure defaults for all environment variables
+- [x] Remove hardcoded production fallback base URL
+- [x] Add boot-time config validation with fail-fast logging
 
 ## P0 - Security hardening
 - [ ] Add rate limiting by user + IP for generation endpoints

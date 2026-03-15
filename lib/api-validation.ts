@@ -441,6 +441,48 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     ), 0)
   ), 0)
 
+  if (messages.length === 0) {
+    throw new RequestValidationError([
+      {
+        field: "messages",
+        message: "Messages must include at least one supported message."
+      }
+    ])
+  }
+
+  const lastMessage = messages[messages.length - 1]
+  const hasUserMessage = messages.some((message) => message.role === "user")
+  const hasLastUserText = lastMessage.role === "user" && lastMessage.parts.some((part) => (
+    part.type === "text" && part.text.trim().length > 0
+  ))
+
+  if (!hasUserMessage) {
+    throw new RequestValidationError([
+      {
+        field: "messages",
+        message: "Messages must include at least one user message."
+      }
+    ])
+  }
+
+  if (lastMessage.role !== "user") {
+    throw new RequestValidationError([
+      {
+        field: "messages[last].role",
+        message: "The latest message must be from the user."
+      }
+    ])
+  }
+
+  if (!hasLastUserText) {
+    throw new RequestValidationError([
+      {
+        field: "messages[last]",
+        message: "The latest user message must include a non-empty text part."
+      }
+    ])
+  }
+
   if (totalTextLength > MAX_TOTAL_TEXT_LENGTH) {
     throw new RequestValidationError([
       {

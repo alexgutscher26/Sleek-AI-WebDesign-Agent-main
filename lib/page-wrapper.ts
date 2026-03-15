@@ -1,4 +1,5 @@
 import { BASE_VARIABLES, FONT_VARIABLES } from "./prompt";
+import { sanitizeGeneratedHtml } from "./html-guardrails";
 
 export function getHTMLWrapper(
   htmlContent: string,
@@ -6,8 +7,9 @@ export function getHTMLWrapper(
   rootStyles: string,
   pageId: string
 ) {
+  const { html: safeHtml } = sanitizeGeneratedHtml(htmlContent)
 
-  const sanitizedHtml = htmlContent
+  const sanitizedHtml = safeHtml
     // Remove h-screen, min-h-screen, h-full from root div specifically
     .replace(
       /<div([^>]*)class="([^"]*)\b(h-screen|min-h-screen|h-full)\b([^"]*)"([^>]*)>/i,

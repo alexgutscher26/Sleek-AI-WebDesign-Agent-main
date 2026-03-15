@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { createAuthRouteHandlers } from '@insforge/nextjs/api';
-import { getInsforgeBaseUrl } from '@/lib/insforge-config';
+import { requireInsforgeConfig } from '@/lib/insforge-config';
 import { createValidationErrorResponse, parseAuthPostBody, parseJsonBody, RequestValidationError } from '@/lib/api-validation';
 import { createErrorResponse } from '@/lib/api-response';
 
 const handlers = createAuthRouteHandlers({
-  baseUrl: getInsforgeBaseUrl()
+  baseUrl: requireInsforgeConfig("initializing auth route handlers").baseUrl
 });
 
 export async function POST(request: NextRequest) {

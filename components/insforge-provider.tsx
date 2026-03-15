@@ -1,6 +1,7 @@
 'use client';
+import { useMemo } from 'react';
 import { InsforgeBrowserProvider } from '@insforge/nextjs';
-import { insforge } from '@/lib/insforge-client';
+import { getInsforgeBrowserClient } from '@/lib/insforge-client';
 
 export function InsforgeProvider({
   children,
@@ -9,12 +10,16 @@ export function InsforgeProvider({
   children: React.ReactNode;
   enabled?: boolean;
 }) {
-  if (!enabled) {
+  const insforgeClient = useMemo(() => (
+    enabled ? getInsforgeBrowserClient() : undefined
+  ), [enabled]);
+
+  if (!enabled || !insforgeClient) {
     return <>{children}</>;
   }
 
   return (
-    <InsforgeBrowserProvider client={insforge} afterSignInUrl="/">
+    <InsforgeBrowserProvider client={insforgeClient} afterSignInUrl="/">
       {children}
     </InsforgeBrowserProvider>
   );

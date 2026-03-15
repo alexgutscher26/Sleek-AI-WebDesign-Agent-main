@@ -13,6 +13,11 @@ import { PageType } from '@/types/project';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/view-state';
 
+type ColorToken = {
+  label: string
+  value: string
+}
+
 type PropsType = {
   page: PageType
   initialPosition?: { x: number; y: number };
@@ -60,7 +65,7 @@ const PageFrame = ({
     return () => window.removeEventListener("message", handleMessage)
   }, [page.id])
 
-  const colorTokens = useMemo(() => {
+  const colorTokens = useMemo<ColorToken[]>(() => {
     if (!page.rootStyles) return [];
     const tokens = [
       { key: '--background', label: 'Background' },
@@ -75,7 +80,7 @@ const PageFrame = ({
     return tokens.map(({ key, label }) => {
       const match = page.rootStyles.match(new RegExp(`${key}:\\s*([^;]+)`));
       return { label, value: match ? match[1].trim() : null };
-    }).filter(t => t.value);
+    }).filter((token): token is ColorToken => Boolean(token.value));
   }, [page.rootStyles]);
 
   const handleCopyCode = () => {
@@ -181,7 +186,7 @@ const PageFrame = ({
                           <div className="flex items-center gap-1.5">
                             <div
                               className="size-4 rounded-sm border border-border"
-                              style={{ backgroundColor: value! }}
+                              style={{ backgroundColor: value }}
                             />
                             <span className="text-xs font-mono text-foreground">{value}</span>
                           </div>

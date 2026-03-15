@@ -1,15 +1,14 @@
 import { auth } from '@insforge/nextjs';
 import { createClient } from '@insforge/sdk';
-import { getInsforgeAnonKey, getInsforgeBaseUrl } from './insforge-config';
+import { requireInsforgeConfig } from './insforge-config';
 
 export async function getAuthServer() {
   const { user } = await auth()
-  const baseUrl = getInsforgeBaseUrl();
-  const anonKey = getInsforgeAnonKey();
+  const config = requireInsforgeConfig("creating Insforge server client")
 
   const insforge = createClient({
-    baseUrl,
-    anonKey
+    baseUrl: config.baseUrl,
+    anonKey: config.anonKey
   });
 
   return { insforge, user }
