@@ -33,7 +33,6 @@ create table if not exists public.messages (
 create table if not exists public.generation_requests (
   id uuid primary key default gen_random_uuid(),
   "userId" text not null,
-  "ipHash" text null,
   "projectId" uuid not null references public.projects(id) on delete cascade,
   "selectedPageId" uuid null references public.pages(id) on delete set null,
   "idempotencyKey" text not null,
@@ -46,6 +45,9 @@ create table if not exists public.generation_requests (
   "updatedAt" timestamptz not null default now(),
   unique ("projectId", "idempotencyKey")
 );
+
+alter table public.generation_requests
+  add column if not exists "ipHash" text;
 
 create index if not exists projects_userid_createdat_idx
   on public.projects ("userId", "createdAt" desc);
@@ -69,9 +71,6 @@ create index if not exists generation_requests_iphash_createdat_idx
 create index if not exists generation_requests_selectedpageid_createdat_idx
   on public.generation_requests ("selectedPageId", "createdAt" desc)
   where "selectedPageId" is not null;
-
-alter table public.generation_requests
-  add column if not exists "ipHash" text;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -135,6 +134,9 @@ begin
   select v_project.id, v_created, v_project.title, v_project."slugId";
 end;
 $$;
+
+drop function if exists public.begin_generation_request(text, uuid, uuid, text, text, text);
+drop function if exists public.begin_generation_request(text, uuid, uuid, text, text, text, text);
 
 create or replace function public.begin_generation_request(
   p_user_id text,

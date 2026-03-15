@@ -321,6 +321,20 @@ const isMissingRpcError = (error: unknown) => {
   return message.includes("could not find the function") || message.includes("function") && message.includes("does not exist")
 }
 
+const isLegacyGenerationRequestSchemaError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return (
+    message.includes(`column "iphash" does not exist`) ||
+    message.includes(`could not find the function public.begin_generation_request`) ||
+    message.includes(`p_ip_hash`) ||
+    message.includes(`function begin_generation_request(`)
+  )
+}
+
 const getOrCreateProjectAtomic = async (
   insforge: RouteInsforge,
   userId: string,
@@ -410,7 +424,7 @@ const beginGenerationRequest = async (
       throw mappedError
     }
 
-    if (!isMissingRpcError(error)) {
+    if (!isMissingRpcError(error) && !isLegacyGenerationRequestSchemaError(error)) {
       throw error
     }
 
