@@ -33,6 +33,7 @@ create table if not exists public.messages (
 create table if not exists public.generation_requests (
   id uuid primary key default gen_random_uuid(),
   "userId" text not null,
+  "ipHash" text null,
   "projectId" uuid not null references public.projects(id) on delete cascade,
   "selectedPageId" uuid null references public.pages(id) on delete set null,
   "idempotencyKey" text not null,
@@ -60,6 +61,17 @@ create index if not exists generation_requests_projectid_createdat_idx
 
 create index if not exists generation_requests_userid_createdat_idx
   on public.generation_requests ("userId", "createdAt" desc);
+
+create index if not exists generation_requests_iphash_createdat_idx
+  on public.generation_requests ("ipHash", "createdAt" desc)
+  where "ipHash" is not null;
+
+create index if not exists generation_requests_selectedpageid_createdat_idx
+  on public.generation_requests ("selectedPageId", "createdAt" desc)
+  where "selectedPageId" is not null;
+
+alter table public.generation_requests
+  add column if not exists "ipHash" text;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -130,7 +142,8 @@ create or replace function public.begin_generation_request(
   p_selected_page_id uuid,
   p_idempotency_key text,
   p_request_hash text,
-  p_request_kind text
+  p_request_kind text,
+  p_ip_hash text default null
 )
 returns table (
   id uuid,
@@ -146,9 +159,57 @@ as $$
 declare
   v_request public.generation_requests%rowtype;
   v_inserted boolean := false;
+  v_user_window interval := interval '10 minutes';
+  v_ip_window interval := interval '10 minutes';
+  v_regenerate_cooldown interval := interval '20 seconds';
+  v_user_limit integer := 12;
+  v_ip_limit integer := 20;
+  v_recent_user_requests integer := 0;
+  v_recent_ip_requests integer := 0;
 begin
+  if p_request_kind in ('generate', 'regenerate') then
+    select count(*)
+    into v_recent_user_requests
+    from public.generation_requests
+    where "userId" = p_user_id
+      and "createdAt" >= now() - v_user_window;
+
+    if v_recent_user_requests >= v_user_limit then
+      raise exception 'USER_RATE_LIMIT_EXCEEDED'
+        using errcode = 'P0001';
+    end if;
+
+    if p_ip_hash is not null then
+      select count(*)
+      into v_recent_ip_requests
+      from public.generation_requests
+      where "ipHash" = p_ip_hash
+        and "createdAt" >= now() - v_ip_window;
+
+      if v_recent_ip_requests >= v_ip_limit then
+        raise exception 'IP_RATE_LIMIT_EXCEEDED'
+          using errcode = 'P0001';
+      end if;
+    end if;
+  end if;
+
+  if p_request_kind = 'regenerate' and p_selected_page_id is not null then
+    if exists (
+      select 1
+      from public.generation_requests
+      where "userId" = p_user_id
+        and "selectedPageId" = p_selected_page_id
+        and "requestKind" = 'regenerate'
+        and "createdAt" >= now() - v_regenerate_cooldown
+    ) then
+      raise exception 'REGENERATE_COOLDOWN_ACTIVE'
+        using errcode = 'P0001';
+    end if;
+  end if;
+
   insert into public.generation_requests (
     "userId",
+    "ipHash",
     "projectId",
     "selectedPageId",
     "idempotencyKey",
@@ -158,6 +219,7 @@ begin
   )
   values (
     p_user_id,
+    p_ip_hash,
     p_project_id,
     p_selected_page_id,
     p_idempotency_key,

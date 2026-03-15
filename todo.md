@@ -37,8 +37,8 @@
 - [x] Add boot-time config validation with fail-fast logging
 
 ## P0 - Security hardening
-- [ ] Add rate limiting by user + IP for generation endpoints
-- [ ] Add abuse prevention for repeated regenerate spam
+- [x] Add rate limiting by user + IP for generation endpoints
+- [x] Add abuse prevention for repeated regenerate spam
 - [ ] Add CSRF strategy for sensitive server actions
 - [ ] Add Content Security Policy headers
 - [ ] Add clickjacking/XSS protection headers

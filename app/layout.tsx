@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { InsforgeProvider } from "@/components/insforge-provider";
 import { QueryProvider } from "@/components/query-provider";
 import InsforgeSetupWizard from "@/components/insforge-setup-wizard";
-import { getInsforgeSetupStatus, logInsforgeConfigAtBoot } from "@/lib/insforge-config";
+import { getInsforgeSetupStatus, logInsforgeConfigAtBoot, requireInsforgeConfig } from "@/lib/insforge-config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,13 +32,16 @@ export default function RootLayout({
 }>) {
   logInsforgeConfigAtBoot()
   const insforgeSetup = getInsforgeSetupStatus();
+  const insforgeConfig = insforgeSetup.configured
+    ? requireInsforgeConfig("building root layout")
+    : undefined
 
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <InsforgeProvider enabled={insforgeSetup.configured}>
+        <InsforgeProvider enabled={insforgeSetup.configured} config={insforgeConfig}>
           <QueryProvider>
             <NuqsAdapter>
               <ThemeProvider

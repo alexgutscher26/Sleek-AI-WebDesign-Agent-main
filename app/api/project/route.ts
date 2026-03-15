@@ -23,6 +23,7 @@ import { DEFAULT_STYLE_INTENSITY } from "@/constants/style-intensity";
 import { createChatCompletionWithRetries, isAbortLikeError } from "@/lib/ai-retry";
 import { createHash } from "node:crypto";
 import { extractPrimaryHtml, sanitizeGeneratedHtml } from "@/lib/html-guardrails";
+import { getClientIp, hashClientIp, mapGenerationRateLimitError, RateLimitError } from "@/lib/generation-abuse";
 
 class AbortError extends Error {
   constructor() {
@@ -219,6 +220,14 @@ const createRequestHash = (input: object) => (
     .digest("hex")
 )
 
+const classifyIntent = (value: string) => {
+  const firstWord = value.trim().toLowerCase().split(" ")[0]
+  const validIntents: RequestKind[] = ["chat", "generate", "regenerate"]
+  return validIntents.includes(firstWord as RequestKind)
+    ? firstWord as RequestKind
+    : "chat"
+}
+
 const prepareGeneratedHtml = (rawHtml: string) => {
   const extractedHtml = extractPrimaryHtml(rawHtml)
   const sanitized = sanitizeGeneratedHtml(extractedHtml)
@@ -364,7 +373,8 @@ const beginGenerationRequest = async (
   selectedPageId: string | null,
   idempotencyKey: string | null,
   requestHash: string,
-  requestKind: RequestKind
+  requestKind: RequestKind,
+  ipHash: string | null
 ) => {
   if (!idempotencyKey) {
     return {
@@ -380,7 +390,8 @@ const beginGenerationRequest = async (
       p_selected_page_id: selectedPageId,
       p_idempotency_key: idempotencyKey,
       p_request_hash: requestHash,
-      p_request_kind: requestKind
+      p_request_kind: requestKind,
+      p_ip_hash: ipHash
     })
 
     if (error) {
@@ -394,13 +405,44 @@ const beginGenerationRequest = async (
       supported: true
     }
   } catch (error) {
+    const mappedError = mapGenerationRateLimitError(error)
+    if (mappedError) {
+      throw mappedError
+    }
+
     if (!isMissingRpcError(error)) {
       throw error
     }
 
-    return {
-      record: null,
-      supported: false
+    try {
+      const { data, error } = await insforge.database.rpc("begin_generation_request", {
+        p_user_id: userId,
+        p_project_id: projectId,
+        p_selected_page_id: selectedPageId,
+        p_idempotency_key: idempotencyKey,
+        p_request_hash: requestHash,
+        p_request_kind: requestKind
+      })
+
+      if (error) {
+        throw error
+      }
+
+      const record = (Array.isArray(data) ? data[0] : data) as GenerationRequestRecord | null
+
+      return {
+        record,
+        supported: true
+      }
+    } catch (fallbackError) {
+      if (!isMissingRpcError(fallbackError)) {
+        throw fallbackError
+      }
+
+      return {
+        record: null,
+        supported: false
+      }
     }
   }
 }
@@ -1097,6 +1139,7 @@ Write 1-2 sentences in first person. Natural, confident. No questions. No "let m
 
 export async function POST(request: NextRequest) {
   const { signal } = request;
+  let operationSignal: ReturnType<typeof createOperationSignal> | null = null
   try {
     const body = await parseJsonBody(request)
     const { messages, slugId, selectedPageId, idempotencyKey, generationMode, styleIntensity } = parseProjectPostBody(body)
@@ -1237,7 +1280,7 @@ export async function POST(request: NextRequest) {
       return createErrorResponse(404, "PAGE_NOT_FOUND", "Page not found")
     }
 
-    const operationSignal = createOperationSignal(signal, GENERATION_TIMEOUT_MS)
+    operationSignal = createOperationSignal(signal, GENERATION_TIMEOUT_MS)
     const requestHash = createRequestHash({
       slugId,
       selectedPageId,
@@ -1245,14 +1288,76 @@ export async function POST(request: NextRequest) {
       styleIntensity,
       messages
     })
+    const createCompletion = createInsforgeCompletion(insforge)
+    const intentResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+      model: "anthropic/claude-sonnet-4.5",
+      messages: [
+        {
+          role: "system",
+          content: SLEEK_INTENT_PROMPT,
+        },
+        {
+          role: "user",
+          content: `${latestUserMessage}\nCLASSIFY THE INTENT NOW. ONE WORD ONLY`
+        }
+      ]
+    }, {
+      fallbackModels: ["google/gemini-2.5-pro"],
+      signal: operationSignal.signal
+    })
+
+    throwIfAborted(operationSignal.signal)
+    throwIfTimedOut(operationSignal.didTimeOut())
+
+    const intent = classifyIntent(intentResult.choices[0]?.message?.content ?? "")
+    const clientIpHash = hashClientIp(getClientIp(request))
+
+    let requestState: Awaited<ReturnType<typeof beginGenerationRequest>> = {
+      record: null,
+      supported: false
+    }
+
+    if (intent !== "chat") {
+      requestState = await beginGenerationRequest(
+        insforge,
+        user.id,
+        projectId,
+        selectedPageId,
+        idempotencyKey,
+        requestHash,
+        intent,
+        clientIpHash
+      )
+
+      if (requestState.record && !requestState.record.wasCreated && requestState.record.status === "in_progress") {
+        operationSignal.cleanup()
+        return createErrorResponse(409, "GENERATION_ALREADY_IN_PROGRESS", "This request is already being processed.")
+      }
+    }
+
+    if (requestState.record?.status === "completed" && requestState.record.response) {
+      const uiStream = createUIMessageStream({
+        generateId: generateId,
+        async execute({ writer }) {
+          try {
+            await replayStoredResponse(writer, requestState.record!.response!)
+          } finally {
+            operationSignal?.cleanup()
+          }
+        }
+      })
+
+      return createUIMessageStreamResponse({
+        stream: uiStream
+      })
+    }
 
     const uiStream = createUIMessageStream({
       generateId: generateId,
       async execute({ writer }) {
         let genCardEmitted = false;
         let hasCommittedWrites = false
-        let generationRequestId: string | null = null
-        const createCompletion = createInsforgeCompletion(insforge)
+        let generationRequestId: string | null = requestState.record?.id ?? null
 
         try {
           emit(writer, "project-title", {
@@ -1262,52 +1367,31 @@ export async function POST(request: NextRequest) {
           throwIfAborted(operationSignal.signal)
           throwIfTimedOut(operationSignal.didTimeOut())
 
-          const intentResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
-            model: "anthropic/claude-sonnet-4.5",
-            messages: [
-              {
-                role: "system",
-                content: SLEEK_INTENT_PROMPT,
-              },
-              {
-                role: "user",
-                content: `${latestUserMessage}\nCLASSIFY THE INTENT NOW. ONE WORD ONLY`
-              }
-            ]
-          }, {
-            fallbackModels: ["google/gemini-2.5-pro"],
-            signal: operationSignal.signal
-          })
-
-          const classifyOutput = (intentResult.choices[0].message.content).trim().toLowerCase();
-          const firstWord = classifyOutput.split(" ")[0];
-          const validIntents = ["chat", "generate", "regenerate"];
-          const intent = (validIntents.includes(firstWord) ? firstWord : "chat") as RequestKind
-
-          const requestState = await beginGenerationRequest(
-            insforge,
-            user.id,
-            projectId,
-            selectedPageId,
-            idempotencyKey,
-            requestHash,
-            intent
-          )
-
-          generationRequestId = requestState.record?.id ?? null
-
-          if (requestState.record?.status === "completed" && requestState.record.response) {
-            await replayStoredResponse(writer, requestState.record.response)
-            hasCommittedWrites = true
-            return
-          }
-
-          if (requestState.record && !requestState.record.wasCreated && requestState.record.status === "in_progress") {
-            writer.write({ type: "error", errorText: "This request is already being processed." })
-            return
-          }
-
           if (intent === "chat") {
+            const chatRequestState = await beginGenerationRequest(
+              insforge,
+              user.id,
+              projectId,
+              selectedPageId,
+              idempotencyKey,
+              requestHash,
+              intent,
+              null
+            )
+
+            generationRequestId = chatRequestState.record?.id ?? null
+
+            if (chatRequestState.record?.status === "completed" && chatRequestState.record.response) {
+              await replayStoredResponse(writer, chatRequestState.record.response)
+              hasCommittedWrites = true
+              return
+            }
+
+            if (chatRequestState.record && !chatRequestState.record.wasCreated && chatRequestState.record.status === "in_progress") {
+              writer.write({ type: "error", errorText: "This request is already being processed." })
+              return
+            }
+
             const chatResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
               model: "google/gemini-2.5-pro",
               messages: [
@@ -1524,6 +1608,24 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
+    operationSignal?.cleanup()
+    if (error instanceof RateLimitError) {
+      return Response.json(
+        {
+          success: false,
+          error: {
+            code: error.code,
+            message: error.message
+          }
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(error.retryAfterSeconds)
+          }
+        }
+      )
+    }
     if (error instanceof RequestValidationError) {
       return createValidationErrorResponse(error)
     }

@@ -277,7 +277,7 @@ const ChatInterface = ({
           }]
         })
       )
-      toast.error("Failed to generate response")
+      toast.error(error.message || "Failed to generate response")
     }
   })
 
