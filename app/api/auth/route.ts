@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createAuthRouteHandlers } from '@insforge/nextjs/api';
 import { getInsforgeBaseUrl } from '@/lib/insforge-config';
 import { createValidationErrorResponse, parseAuthPostBody, parseJsonBody, RequestValidationError } from '@/lib/api-validation';
+import { createErrorResponse } from '@/lib/api-response';
 
 const handlers = createAuthRouteHandlers({
   baseUrl: getInsforgeBaseUrl()
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
       return createValidationErrorResponse(error)
     }
 
-    throw error
+    return createErrorResponse(500, "INTERNAL_SERVER_ERROR", "Internal server error")
   }
 }
 

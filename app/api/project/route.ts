@@ -5,6 +5,7 @@ import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMes
 import { SLEEK_CHAT_PROMPT, SLEEK_INTENT_PROMPT, WEB_ANALYSIS_PROMPT, WEB_GENERATION_PROMPT } from "@/lib/prompt";
 import { createValidationErrorResponse, parseJsonBody, parseProjectPostBody, RequestValidationError } from "@/lib/api-validation";
 import { getOwnedProjectBySlug } from "@/lib/project-access";
+import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
 
 class AbortError extends Error {
   constructor() {
@@ -17,7 +18,7 @@ class AbortError extends Error {
 export async function GET() {
   try {
     const { user, insforge } = await getAuthServer();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized");
 
     const { data: projects, error } = await insforge.database.from("projects")
       .select("id, title, slugId, createdAt")
@@ -25,14 +26,12 @@ export async function GET() {
       .order("createdAt", { ascending: false })
       .limit(10);
 
-    if (error) return NextResponse.json({ error: "Failed to fetch projects" }, {
-      status: 400
-    });
+    if (error) return createErrorResponse(400, "PROJECT_FETCH_FAILED", "Failed to fetch projects");
 
-    return NextResponse.json(projects)
+    return createSuccessResponse(projects)
   } catch (error) {
     console.log(error);
-    return NextResponse.json({ error: "internal server error" }, { status: 500 })
+    return createErrorResponse(500, "INTERNAL_SERVER_ERROR", "Internal server error")
   }
 }
 
@@ -428,9 +427,7 @@ export async function POST(request: NextRequest) {
     const { messages, slugId, selectedPageId } = parseProjectPostBody(body)
 
     const { user, insforge } = await getAuthServer()
-    if (!user?.id) return NextResponse.json({
-      error: "Unauthorized"
-    }, { status: 401 })
+    if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
 
     const lastMessage = messages[messages.length - 1]
     const latestUserMessage = lastMessage.parts.find((part) => part.type === "text")?.text?.trim()
@@ -463,7 +460,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (conflictingProject && conflictingProject.userId !== user.id) {
-        return NextResponse.json({ error: "Project not found" }, { status: 404 })
+        return createErrorResponse(404, "PROJECT_NOT_FOUND", "Project not found")
       }
 
       console.log("creating new project");
@@ -523,7 +520,7 @@ export async function POST(request: NextRequest) {
       : { data: null }
 
     if (selectedPageId && !selectedPage) {
-      return NextResponse.json({ error: "Page not found" }, { status: 404 })
+      return createErrorResponse(404, "PAGE_NOT_FOUND", "Page not found")
     }
 
     const checkAbort = () => {
@@ -740,6 +737,6 @@ export async function POST(request: NextRequest) {
       return createValidationErrorResponse(error)
     }
     console.log(error);
-    return Response.json({ error: 'Internal server error' }, { status: 500 });
+    return createErrorResponse(500, "INTERNAL_SERVER_ERROR", "Internal server error");
   }
 }

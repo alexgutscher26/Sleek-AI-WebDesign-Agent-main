@@ -41,7 +41,11 @@ const ChatInterface = ({
     queryFn: async () => {
       const res = await fetch(`/api/project/${slugId}`);
       if (!res.ok) throw new Error("Failed to fetch project");
-      return res.json() as Promise<{ title: string; messages: UIMessage[]; pages: PageType[] }>
+      const payload = await res.json() as {
+        success: true;
+        data: { title: string; messages: UIMessage[]; pages: PageType[] }
+      }
+      return payload.data
     },
   enabled: isProjectPage, // Only fetch on project page
   refetchOnWindowFocus: false, // Prevent breaking stream when switching tabs
@@ -248,7 +252,7 @@ const ChatInterface = ({
             >
               <ArrowLeft />
             </Button>
-            <h5 className="font-semibold tracking-tight
+          <h5 className="font-semibold tracking-tight
             truncate pr-4">
               {projectTitle || projectData?.title || "Untitled Project"}
             </h5>

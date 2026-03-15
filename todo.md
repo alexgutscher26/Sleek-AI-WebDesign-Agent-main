@@ -19,8 +19,8 @@
 - [x] Add strict request validation in `POST /api/project`
 - [x] Add ownership checks for project/page access by `slugId`
 - [x] Add route-level schema validation for all APIs
-- [ ] Add unified error response shape across APIs
-- [ ] Add hard limits for prompt length and file upload size
+- [x] Add unified error response shape across APIs
+- [x] Add hard limits for prompt length and file upload size
 - [ ] Add MIME/type verification for uploaded files
 - [ ] Add abort-safe stream handling with no partial DB writes
 - [ ] Add retries for transient AI provider errors
@@ -51,13 +51,6 @@
 - [ ] Add privacy retention policy for prompts/images
 - [ ] Add secure deletion workflow for user data
 - [ ] Add suspicious activity alerts and lockouts
-
-## P0 - Tailwind and foundation alignment
-- [ ] Downgrade and lock Tailwind to `3.4.x`
-- [ ] Remove Tailwind v4-only dependencies and config patterns
-- [ ] Validate all utility classes compile on Tailwind 3.4
-- [ ] Add style token conventions for app + generated designs
-- [ ] Add lint checks for non-token hardcoded colors in generated UI
 
 ## P1 - Core app UX improvements
 - [ ] Add robust empty/loading/error states for all views

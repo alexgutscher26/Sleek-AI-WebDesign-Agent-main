@@ -9,6 +9,8 @@ import { Attachment, AttachmentPreview, AttachmentRemove, Attachments } from '..
 import { PageType } from '@/types/project';
 import { useCanvas } from '@/hooks/use-canvas';
 import { Badge } from '../ui/badge';
+import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from '@/lib/request-limits';
+import { toast } from 'sonner';
 
 type ChatInputProps = {
   input: string;
@@ -92,11 +94,14 @@ const ChatInput = ({
 
 
       <PromptInput
+        accept={ALLOWED_FILE_ACCEPT}
         globalDrop
         className="rounded-xl! shadow-md bg-background
          border
         "
+        maxFileSize={MAX_FILE_SIZE_BYTES}
         onSubmit={handleSubmit}
+        onError={(err) => toast.error(err.message)}
       >
         {selectedPage && (
           <div className='px-2 pt-2 w-full'>

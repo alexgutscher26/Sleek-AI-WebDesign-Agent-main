@@ -167,12 +167,16 @@ const ProjectGrid = () => {
     queryFn: async () => {
       const res = await fetch(`/api/project`);
       if (!res.ok) return [];
-      return res.json() as Promise<{
-        id: string;
-        title: string;
-        slugId: string;
-        createdAt: string
-      }[]>
+      const payload = await res.json() as {
+        success: true;
+        data: {
+          id: string;
+          title: string;
+          slugId: string;
+          createdAt: string
+        }[]
+      }
+      return payload.data
     }
   })
 

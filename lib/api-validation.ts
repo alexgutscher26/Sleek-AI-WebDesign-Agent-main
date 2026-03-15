@@ -1,9 +1,18 @@
-import { NextResponse } from "next/server"
+import { createErrorResponse } from "@/lib/api-response"
+import {
+  ALLOWED_FILE_MIME_TYPES,
+  MAX_FILE_SIZE_BYTES,
+  MAX_MESSAGES,
+  MAX_TEXT_PART_LENGTH,
+  MAX_TOTAL_TEXT_LENGTH,
+  MIME_EXTENSIONS
+} from "@/lib/request-limits"
 
 const SLUG_ID_PATTERN = /^[A-Za-z0-9]{6,64}$/
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const ALLOWED_MESSAGE_ROLES = new Set(["system", "user", "assistant"])
 const ALLOWED_PART_TYPES = new Set(["text", "file"])
+const ALLOWED_FILE_MIME_TYPES_SET = new Set(ALLOWED_FILE_MIME_TYPES)
 
 type ValidationIssue = {
   field: string
@@ -30,6 +39,7 @@ type FilePart = {
   url: string
   mediaType: string
   filename?: string
+  size?: number
 }
 
 export type ApiMessagePart = TextPart | FilePart
@@ -97,6 +107,16 @@ const validateTextPart = (value: Record<string, unknown>, field: string) => {
     }
   }
 
+  if (value.text.length > MAX_TEXT_PART_LENGTH) {
+    return {
+      ok: false as const,
+      issue: {
+        field,
+        message: `Text parts must be ${MAX_TEXT_PART_LENGTH} characters or fewer.`
+      }
+    }
+  }
+
   return {
     ok: true as const,
     value: {
@@ -121,13 +141,78 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
     }
   }
 
+  if (!ALLOWED_FILE_MIME_TYPES_SET.has(value.mediaType as (typeof ALLOWED_FILE_MIME_TYPES)[number])) {
+    return {
+      ok: false as const,
+      issue: {
+        field,
+        message: "Only JPEG, PNG, WEBP, and GIF image uploads are supported."
+      }
+    }
+  }
+
+  if (
+    typeof value.size !== "number" ||
+    !Number.isFinite(value.size) ||
+    value.size <= 0 ||
+    value.size > MAX_FILE_SIZE_BYTES
+  ) {
+    return {
+      ok: false as const,
+      issue: {
+        field,
+        message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`
+      }
+    }
+  }
+
+  if (typeof value.filename !== "string" || !value.filename.trim()) {
+    return {
+      ok: false as const,
+      issue: {
+        field,
+        message: "File parts must include a filename."
+      }
+    }
+  }
+
+  const normalizedFilename = value.filename.toLowerCase()
+  const allowedExtensions = MIME_EXTENSIONS[value.mediaType as keyof typeof MIME_EXTENSIONS] ?? []
+  const matchesExtension = allowedExtensions.some((extension) =>
+    normalizedFilename.endsWith(extension)
+  )
+
+  if (!matchesExtension) {
+    return {
+      ok: false as const,
+      issue: {
+        field,
+        message: "File type does not match the provided filename extension."
+      }
+    }
+  }
+
+  if (value.url.startsWith("data:")) {
+    const declaredMimeType = value.url.slice(5).split(";")[0]
+    if (declaredMimeType !== value.mediaType) {
+      return {
+        ok: false as const,
+        issue: {
+          field,
+          message: "File data URL MIME type does not match the provided media type."
+        }
+      }
+    }
+  }
+
   return {
     ok: true as const,
     value: {
       type: "file" as const,
       url: value.url,
       mediaType: value.mediaType,
-      filename: typeof value.filename === "string" ? value.filename : undefined
+      filename: typeof value.filename === "string" ? value.filename : undefined,
+      size: typeof value.size === "number" ? value.size : undefined
     }
   }
 }
@@ -229,6 +314,11 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
 
   if (!Array.isArray(input.messages) || input.messages.length === 0) {
     issues.push({ field: "messages", message: "Messages must be a non-empty array." })
+  } else if (input.messages.length > MAX_MESSAGES) {
+    issues.push({
+      field: "messages",
+      message: `Messages must contain ${MAX_MESSAGES} entries or fewer.`
+    })
   }
 
   const messages: ApiMessage[] = []
@@ -250,6 +340,21 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
 
   if (issues.length > 0) {
     throw new RequestValidationError(issues)
+  }
+
+  const totalTextLength = messages.reduce((sum, message) => (
+    sum + message.parts.reduce((partSum, part) => (
+      part.type === "text" ? partSum + part.text.length : partSum
+    ), 0)
+  ), 0)
+
+  if (totalTextLength > MAX_TOTAL_TEXT_LENGTH) {
+    throw new RequestValidationError([
+      {
+        field: "messages",
+        message: `Total prompt text must be ${MAX_TOTAL_TEXT_LENGTH} characters or fewer.`
+      }
+    ])
   }
 
   if (!slugIdResult.ok || !selectedPageIdResult.ok) {
@@ -340,11 +445,7 @@ export function parseSlugRouteParams(input: unknown) {
 }
 
 export function createValidationErrorResponse(error: RequestValidationError) {
-  return NextResponse.json(
-    {
-      error: "Invalid request",
-      issues: error.issues
-    },
-    { status: 400 }
-  )
+  return createErrorResponse(400, "INVALID_REQUEST", "Invalid request", {
+    issues: error.issues
+  })
 }
