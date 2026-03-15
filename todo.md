@@ -77,7 +77,7 @@
 
 ## P1 - AI quality improvements
 - [x] Add selectable generation modes (landing, dashboard, auth, docs, ecommerce)
-- [ ] Add style intensity controls (minimal, balanced, bold)
+- [x] Add style intensity controls (minimal, balanced, bold)
 - [ ] Add creativity controls (strict-to-prompt <-> exploratory)
 - [ ] Add layout complexity controls
 - [ ] Add content depth controls (wireframe, realistic copy, complete)

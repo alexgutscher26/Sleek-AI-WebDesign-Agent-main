@@ -10,14 +10,17 @@ import { Spinner } from '../ui/spinner';
 import { PageType } from '@/types/project';
 import { ErrorState, LoadingState } from '../ui/view-state';
 import type { GenerationMode } from '@/constants/generation-mode';
+import type { StyleIntensity } from '@/constants/style-intensity';
 
 type PropsType = {
   className?: string;
   generationMode: GenerationMode;
+  styleIntensity: StyleIntensity;
   input: string;
   isLoading: boolean;
   isProjectLoading?: boolean;
   setGenerationMode: (mode: GenerationMode) => void;
+  setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
   messages: UIMessage[];
   error?: Error;
@@ -37,10 +40,12 @@ type GenerationCardData = {
 const ChatPanel = ({
   className,
   generationMode,
+  styleIntensity,
   input,
   isLoading,
   setInput,
   setGenerationMode,
+  setStyleIntensity,
   messages,
   onStop,
   onSubmit,
@@ -143,10 +148,12 @@ const ChatPanel = ({
         <ChatInput
           input={input}
           generationMode={generationMode}
+          styleIntensity={styleIntensity}
           isLoading={isLoading}
           status={status}
           selectedPage={selectedPage}
           setGenerationMode={setGenerationMode}
+          setStyleIntensity={setStyleIntensity}
           setInput={setInput}
           onStop={onStop}
           onSubmit={onSubmit}

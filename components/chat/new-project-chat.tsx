@@ -7,13 +7,16 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { EmptyState, ErrorState } from '../ui/view-state';
 import type { GenerationMode } from '@/constants/generation-mode';
+import type { StyleIntensity } from '@/constants/style-intensity';
 
 type PropsType = {
   input: string;
   generationMode: GenerationMode;
+  styleIntensity: StyleIntensity;
   isLoading: boolean;
   status: ChatStatus;
   setGenerationMode: (mode: GenerationMode) => void;
+  setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
@@ -22,9 +25,11 @@ type PropsType = {
 const NewProjectChat = ({
   input,
   generationMode,
+  styleIntensity,
   isLoading,
   status,
   setGenerationMode,
+  setStyleIntensity,
   setInput,
   onStop,
   onSubmit
@@ -124,9 +129,11 @@ const NewProjectChat = ({
             <ChatInput
               input={input}
               generationMode={generationMode}
+              styleIntensity={styleIntensity}
               isLoading={isLoading}
               status={status}
               setGenerationMode={setGenerationMode}
+              setStyleIntensity={setStyleIntensity}
               setInput={setInput}
               onStop={onStop}
               onSubmit={onSubmit}

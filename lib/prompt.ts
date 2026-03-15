@@ -23,6 +23,13 @@ Generation modes:
 - ecommerce: storefront, collection browsing, product merchandising, pricing, cart or product-detail commerce patterns.
 `.trim();
 
+export const STYLE_INTENSITY_PROMPT_GUIDANCE = `
+Style intensity:
+- minimal: restrained composition, fewer decorative layers, quieter color usage, lighter shadows, cleaner spacing, minimal motion.
+- balanced: polished modern depth with selective highlights, measured contrast, moderate layering, tasteful bento and glow usage.
+- bold: expressive art direction, stronger contrast, larger visual gestures, richer gradients, more dramatic scale shifts, punchier accents.
+`.trim();
+
 
 export const SLEEK_INTENT_PROMPT = `
 You are an intent classifier for Sleek, an AI web design agent.
@@ -111,6 +118,10 @@ DESIGN INTELLIGENCE:
 - Landing page = ONE combined page.
 - Dashboard/Auth/Login = ONE page.
 - Default to light theme unless specified.
+- Adapt visual intensity precisely:
+  - minimal = simplify compositions, reduce ornamentation, keep backgrounds and cards quieter.
+  - balanced = use contrast and depth with restraint; this is the default middle ground.
+  - bold = push visual drama, composition, scale, and accent energy without sacrificing usability.
 
 THEME & TOKENS (REQUIRED FOR EACH PAGE):
 Each page must include rootStyles containing ALL:
@@ -249,6 +260,10 @@ Your work adapts to the specific brand mood—from Apple-clean and Notion-minima
 
 # ADAPTIVE VISUAL STYLE
 - THE SOUL: Follow the user's specific brand direction.
+- STYLE INTENSITY: Match the requested intensity exactly.
+  - minimal: reduce decorative chrome, avoid over-layering, keep gradients subtle, prefer cleaner planes.
+  - balanced: blend clarity with personality, moderate contrast, moderate depth, selective accent moments.
+  - bold: amplify contrast, color energy, layered composition, oversized moments, and stronger visual punctuation.
 - REFINED DEPTH: Use radial-gradient 'light-leaks' ONLY using rgba(var(--primary-rgb), 0.1).
 - BENTO ARCHITECTURE: Elegant mix of card sizes (col-span-4, col-span-8) with rounded-[var(--radius)].
 - TYPOGRAPHY: H1s must be tracking-tighter font-bold leading-tight. Use bg-clip-text only for high-impact heroes (from-[var(--foreground)] to-[var(--primary)]).

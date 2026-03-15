@@ -12,15 +12,18 @@ import { Badge } from '../ui/badge';
 import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from '@/lib/request-limits';
 import { toast } from 'sonner';
 import { DEFAULT_GENERATION_MODE, GENERATION_MODES, type GenerationMode } from '@/constants/generation-mode';
+import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITIES, type StyleIntensity } from '@/constants/style-intensity';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 type ChatInputProps = {
   generationMode: GenerationMode;
+  styleIntensity: StyleIntensity;
   input: string;
   isLoading: boolean;
   status: ChatStatus;
   selectedPage?: PageType;
   setGenerationMode: (mode: GenerationMode) => void;
+  setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
@@ -28,11 +31,13 @@ type ChatInputProps = {
 
 const ChatInput = ({
   generationMode,
+  styleIntensity,
   input,
   isLoading,
   status,
   selectedPage,
   setGenerationMode,
+  setStyleIntensity,
   setInput,
   onStop,
   onSubmit,
@@ -42,6 +47,7 @@ const ChatInput = ({
 
   const { setSelectedPageId } = useCanvas()
   const selectedMode = GENERATION_MODES.find((mode) => mode.value === generationMode)
+  const selectedIntensity = STYLE_INTENSITIES.find((intensity) => intensity.value === styleIntensity)
 
   const handleSubmit = (message: PromptInputMessage) => {
     if (!isSignedIn) {
@@ -52,6 +58,7 @@ const ChatInput = ({
     setShowAuthBanner(false);
     onSubmit(message, {
       generationMode,
+      styleIntensity,
       selectedPageId: selectedPage?.id
     });
     setSelectedPageId(null)
@@ -121,34 +128,59 @@ const ChatInput = ({
             </Badge>
           </div>
         )}
-        <div className='flex items-center justify-between gap-3 px-2 pt-2'>
+        <div className='flex flex-wrap items-start justify-between gap-3 px-2 pt-2'>
           <div className='px-1'>
             <p className='text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground'>
-              Generation Mode
+              Generation Controls
             </p>
           </div>
-          <Select
-            value={generationMode}
-            onValueChange={(value) => setGenerationMode(value as GenerationMode)}
-          >
-            <SelectTrigger className='h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs'>
-              <SelectValue placeholder={DEFAULT_GENERATION_MODE}>
-                {selectedMode?.label ?? DEFAULT_GENERATION_MODE}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent align="end">
-              {GENERATION_MODES.map((mode) => (
-                <SelectItem key={mode.value} value={mode.value}>
-                  <div className='flex flex-col'>
-                    <span>{mode.label}</span>
-                    <span className='text-[11px] text-muted-foreground'>
-                      {mode.description}
-                    </span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <Select
+              value={generationMode}
+              onValueChange={(value) => setGenerationMode(value as GenerationMode)}
+            >
+              <SelectTrigger className='h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs'>
+                <SelectValue placeholder={DEFAULT_GENERATION_MODE}>
+                  {selectedMode?.label ?? DEFAULT_GENERATION_MODE}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {GENERATION_MODES.map((mode) => (
+                  <SelectItem key={mode.value} value={mode.value}>
+                    <div className='flex flex-col'>
+                      <span>{mode.label}</span>
+                      <span className='text-[11px] text-muted-foreground'>
+                        {mode.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={styleIntensity}
+              onValueChange={(value) => setStyleIntensity(value as StyleIntensity)}
+            >
+              <SelectTrigger className='h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs'>
+                <SelectValue placeholder={DEFAULT_STYLE_INTENSITY}>
+                  {selectedIntensity?.label ?? DEFAULT_STYLE_INTENSITY}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {STYLE_INTENSITIES.map((intensity) => (
+                  <SelectItem key={intensity.value} value={intensity.value}>
+                    <div className='flex flex-col'>
+                      <span>{intensity.label}</span>
+                      <span className='text-[11px] text-muted-foreground'>
+                        {intensity.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <PromptInputAttachmentsDisplay />
         <PromptInputBody>

@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { convertModelMessages, generateProjectTitle } from "@/app/action/action";
 import { getAuthServer } from "@/lib/insforge-server";
 import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMessage } from "ai";
-import { GENERATION_MODE_PROMPT_GUIDANCE, SLEEK_CHAT_PROMPT, SLEEK_INTENT_PROMPT, WEB_ANALYSIS_PROMPT, WEB_GENERATION_PROMPT } from "@/lib/prompt";
+import { GENERATION_MODE_PROMPT_GUIDANCE, SLEEK_CHAT_PROMPT, SLEEK_INTENT_PROMPT, STYLE_INTENSITY_PROMPT_GUIDANCE, WEB_ANALYSIS_PROMPT, WEB_GENERATION_PROMPT } from "@/lib/prompt";
 import { createValidationErrorResponse, parseJsonBody, parseProjectPostBody, RequestValidationError } from "@/lib/api-validation";
 import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
+import { DEFAULT_STYLE_INTENSITY } from "@/constants/style-intensity";
 
 class AbortError extends Error {
   constructor() {
@@ -99,6 +100,7 @@ async function runGenerationWorker({
   existingPages,
   latestUserMessage,
   generationMode,
+  styleIntensity,
   checkAbort,
 }: any) {
   const { pages } = analysis;
@@ -163,8 +165,9 @@ async function runGenerationWorker({
         {
           role: 'user',
           content: `
- GENERATE HTML FOR THE FOLLOWING PAGE:
+         GENERATE HTML FOR THE FOLLOWING PAGE:
 - Generation Mode: ${generationMode}
+- Style Intensity: ${styleIntensity}
 - Page Name: ${page.name}
 - Page Purpose: ${page.purpose}
 - Visual Description: ${page.visualDescription}
@@ -319,6 +322,7 @@ async function runRegenerateWorker({
   latestUserMessage,
   analysis,
   generationMode,
+  styleIntensity,
   checkAbort,
 }: any) {
   if (!selectedPage) {
@@ -361,6 +365,7 @@ async function runRegenerateWorker({
                 RULE: Return the COMPLETE page HTML with ONLY the requested change applied. Every other section, component, and element must remain exactly as it is in the Current HTML.
 
                 GENERATION MODE: ${generationMode}
+                STYLE INTENSITY: ${styleIntensity}
                 EDITING: "${selectedPage.name}"
                 USER REQUEST: "${latestUserMessage}"
                 CHANGE ONLY: ${analysis.pages[0].visualDescription}
@@ -473,7 +478,7 @@ export async function POST(request: NextRequest) {
   const { signal } = request;
   try {
     const body = await parseJsonBody(request)
-    const { messages, slugId, selectedPageId, generationMode } = parseProjectPostBody(body)
+    const { messages, slugId, selectedPageId, generationMode, styleIntensity } = parseProjectPostBody(body)
 
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
@@ -702,6 +707,11 @@ export async function POST(request: NextRequest) {
     ${GENERATION_MODE_PROMPT_GUIDANCE}
     Build specifically for the "${generationMode}" surface type unless the user explicitly asks for a different format.
 
+    STYLE INTENSITY: ${styleIntensity || DEFAULT_STYLE_INTENSITY}
+    STYLE GUIDANCE:
+    ${STYLE_INTENSITY_PROMPT_GUIDANCE}
+    Match the requested intensity with clear visual restraint or drama in both layout and styling.
+
     ${selectedPage && isRegen
                           ? `EDITING THIS PAGE:\n- Name: ${selectedPage.name}\n- Current Styles:\n${selectedPage.rootStyles}\n- Current HTML:\n${selectedPage.htmlContent}\nBe surgical apply only requested changes.\n\n`
                           : selectedPage && !isRegen
@@ -748,6 +758,7 @@ export async function POST(request: NextRequest) {
                 latestUserMessage,
                 analysis,
                 generationMode,
+                styleIntensity,
                 checkAbort,
               })
               return
@@ -762,6 +773,7 @@ export async function POST(request: NextRequest) {
               existingPages,
               latestUserMessage,
               generationMode,
+              styleIntensity,
               checkAbort,
             });
           }

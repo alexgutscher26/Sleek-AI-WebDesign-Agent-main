@@ -8,6 +8,7 @@ import {
   MIME_EXTENSIONS
 } from "@/lib/request-limits"
 import { DEFAULT_GENERATION_MODE, GENERATION_MODE_SET, type GenerationMode } from "@/constants/generation-mode"
+import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITY_SET, type StyleIntensity } from "@/constants/style-intensity"
 
 const SLUG_ID_PATTERN = /^[A-Za-z0-9]{6,64}$/
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
@@ -54,6 +55,7 @@ export type ProjectPostBody = {
   slugId: string
   selectedPageId: string | null
   generationMode: GenerationMode
+  styleIntensity: StyleIntensity
   messages: ApiMessage[]
 }
 
@@ -114,6 +116,21 @@ const validateGenerationMode = (value: unknown, field = "generationMode") => {
   }
 
   return { ok: true as const, value: value as GenerationMode }
+}
+
+const validateStyleIntensity = (value: unknown, field = "styleIntensity") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: DEFAULT_STYLE_INTENSITY }
+  }
+
+  if (typeof value !== "string" || !STYLE_INTENSITY_SET.has(value as StyleIntensity)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be one of: minimal, balanced, bold." }
+    }
+  }
+
+  return { ok: true as const, value: value as StyleIntensity }
 }
 
 const validateTextPart = (value: Record<string, unknown>, field: string) => {
@@ -355,10 +372,12 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   const slugIdResult = validateSlugId(input.slugId)
   const selectedPageIdResult = validateOptionalEntityId(input.selectedPageId, "selectedPageId")
   const generationModeResult = validateGenerationMode(input.generationMode)
+  const styleIntensityResult = validateStyleIntensity(input.styleIntensity)
 
   if (!slugIdResult.ok) issues.push(slugIdResult.issue)
   if (!selectedPageIdResult.ok) issues.push(selectedPageIdResult.issue)
   if (!generationModeResult.ok) issues.push(generationModeResult.issue)
+  if (!styleIntensityResult.ok) issues.push(styleIntensityResult.issue)
 
   if (!Array.isArray(input.messages) || input.messages.length === 0) {
     issues.push({ field: "messages", message: "Messages must be a non-empty array." })
@@ -408,7 +427,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     ])
   }
 
-  if (!slugIdResult.ok || !selectedPageIdResult.ok || !generationModeResult.ok) {
+  if (!slugIdResult.ok || !selectedPageIdResult.ok || !generationModeResult.ok || !styleIntensityResult.ok) {
     throw new RequestValidationError([
       { field: "body", message: "Request validation failed." }
     ])
@@ -418,6 +437,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     slugId: slugIdResult.value,
     selectedPageId: selectedPageIdResult.value,
     generationMode: generationModeResult.value,
+    styleIntensity: styleIntensityResult.value,
     messages
   }
 }

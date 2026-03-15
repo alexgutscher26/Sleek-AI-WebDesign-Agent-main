@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCanvas } from "@/hooks/use-canvas";
 import { ErrorState } from "../ui/view-state";
 import { DEFAULT_GENERATION_MODE, type GenerationMode } from "@/constants/generation-mode";
+import { DEFAULT_STYLE_INTENSITY, type StyleIntensity } from "@/constants/style-intensity";
 
 type PropsType = {
   isProjectPage?: boolean;
@@ -58,6 +59,7 @@ const ChatInterface = ({
 
   const [input, setInput] = useState("")
   const [generationMode, setGenerationMode] = useState<GenerationMode>(DEFAULT_GENERATION_MODE)
+  const [styleIntensity, setStyleIntensity] = useState<StyleIntensity>(DEFAULT_STYLE_INTENSITY)
   const [hasStarted, setHasStarted] = useState(isProjectPage);
   const [projectTitle, setProjectTitle] = useState<string | null>(null)
   const [pages, setPages] = useState<PageType[]>([]);
@@ -312,7 +314,9 @@ const ChatInterface = ({
         input={input}
         setInput={setInput}
         generationMode={generationMode}
+        styleIntensity={styleIntensity}
         setGenerationMode={setGenerationMode}
+        setStyleIntensity={setStyleIntensity}
         isLoading={isLoading}
         status={status}
         onStop={stop}
@@ -372,7 +376,9 @@ const ChatInterface = ({
           input={input}
           setInput={setInput}
           generationMode={generationMode}
+          styleIntensity={styleIntensity}
           setGenerationMode={setGenerationMode}
+          setStyleIntensity={setStyleIntensity}
           isLoading={isLoading}
           isProjectLoading={isProjectLoading}
           selectedPage={selectedPage}
