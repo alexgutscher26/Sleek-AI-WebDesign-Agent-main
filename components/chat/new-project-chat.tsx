@@ -5,6 +5,7 @@ import { Suggestion, Suggestions } from '../ai-elements/suggestion';
 import ChatInput from './chat-input';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import { EmptyState, ErrorState } from '../ui/view-state';
 
 type PropsType = {
   input: string;
@@ -12,7 +13,7 @@ type PropsType = {
   status: ChatStatus;
   setInput: (input: string) => void;
   onStop: () => void;
-  onSubmit: (message: PromptInputMessage, options?: any) => void;
+  onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
 }
 
 const NewProjectChat = ({
@@ -162,11 +163,20 @@ const NewProjectChat = ({
 }
 
 const ProjectGrid = () => {
-  const { data: projects, isLoading } = useQuery({
+  const { data: projects, isLoading, isError, refetch } = useQuery({
     queryKey: ['projects'],
     queryFn: async () => {
       const res = await fetch(`/api/project`);
-      if (!res.ok) return [];
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null) as {
+          error?: { message?: string }
+        } | null;
+
+        throw new Error(
+          payload?.error?.message || "Failed to load recent projects."
+        );
+      }
+
       const payload = await res.json() as {
         success: true;
         data: {
@@ -180,11 +190,29 @@ const ProjectGrid = () => {
     }
   })
 
-  console.log(projects)
-
   if (isLoading) return <ProjectGridSkeleton />
+  if (isError) {
+    return (
+      <div className="w-full px-8 pt-8">
+        <ErrorState
+          title="Recent projects are unavailable"
+          description="We couldn't load your project history right now."
+          actionLabel="Try again"
+          onAction={() => refetch()}
+        />
+      </div>
+    )
+  }
+
   if (!projects || projects.length === 0) {
-    return null
+    return (
+      <div className="w-full px-8 pt-8">
+        <EmptyState
+          title="No projects yet"
+          description="Your generated sites will appear here after you create your first project."
+        />
+      </div>
+    )
   }
   return (
     <div className="w-full mx-auto pt-8 px-8">

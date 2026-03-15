@@ -1,17 +1,14 @@
 import { ChatStatus, UIMessage } from 'ai';
-import React from 'react'
 import { PromptInputMessage } from '../ai-elements/prompt-input';
 import { Conversation, ConversationContent, ConversationEmptyState } from '../ai-elements/conversation';
 import ChatInput from './chat-input';
-import { Skeleton } from '../ui/skeleton';
 import { Message, MessageContent, MessageResponse } from '../ai-elements/message';
 import { Attachment, AttachmentPreview, Attachments } from '../ai-elements/attachments';
 import { Loader } from '../ui/loader';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { AlertCircle, AlertCircleIcon, CheckCircle2, CheckIcon, Circle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { CheckCircle2, AlertCircleIcon, Circle } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { PageType } from '@/types/project';
+import { ErrorState, LoadingState } from '../ui/view-state';
 
 type PropsType = {
   className?: string;
@@ -22,9 +19,16 @@ type PropsType = {
   messages: UIMessage[];
   error?: Error;
   onStop: () => void;
-  onSubmit: (message: PromptInputMessage, options?: any) => void;
+  onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
   status: ChatStatus;
   selectedPage?: PageType
+}
+
+type GenerationCardData = {
+  status: 'analyzing' | 'generating' | 'regenerating' | 'canceled' | 'complete' | 'error';
+  pages: { id: string, name: string, done: boolean }[]
+  currentPageId?: string
+  regeneratePage: { id: string, name: string, done: boolean }
 }
 
 const ChatPanel = ({
@@ -45,70 +49,71 @@ const ChatPanel = ({
       <Conversation className={className}>
         <ConversationContent>
           {isProjectLoading ? (
-            <div className='flex flex-col gap-2 pt-2'>
-              <Skeleton className='w-full h-6' />
-              <Skeleton className='w-3/4 h-4' />
-              <Skeleton className='w-1/2 h-4' />
-            </div>
+            <LoadingState
+              className="min-h-[320px]"
+              title="Loading conversation"
+              description="Pulling in your messages and generated pages."
+            />
           ) : messages.length === 0 ? (
-            <ConversationEmptyState />
-          ) : messages?.map((message, msgIndex) => {
+            <ConversationEmptyState
+              title="No messages yet"
+              description="Describe the site you want to build to start generating pages."
+            />
+          ) : messages?.map((message) => {
             const attachmentsFromMessage = message.parts.filter(
               (part) => part.type === "file"
             )
             return (
-              <>
-                <Message from={message.role} key={message.id}>
-                  <MessageContent className="text-[14.5px]">
-                    {attachmentsFromMessage.length > 0 && (
-                      <Attachments variant="grid">
-                        {attachmentsFromMessage.map((part, i) => {
-                          const id = `${message.id}-file-${i}`
-                          const attachmentData = { ...part, id }
-                          return (
-                            <Attachment
-                              data={attachmentData}
-                              key={id}
-                              className="size-20 border-primary/10"
-                            >
-                              <AttachmentPreview />
-                            </Attachment>
-                          )
-                        })}
-                      </Attachments>
-                    )}
+              <Message from={message.role} key={message.id}>
+                <MessageContent className="text-[14.5px]">
+                  {attachmentsFromMessage.length > 0 && (
+                    <Attachments variant="grid">
+                      {attachmentsFromMessage.map((part, i) => {
+                        const id = `${message.id}-file-${i}`
+                        const attachmentData = { ...part, id }
+                        return (
+                          <Attachment
+                            data={attachmentData}
+                            key={id}
+                            className="size-20 border-primary/10"
+                          >
+                            <AttachmentPreview />
+                          </Attachment>
+                        )
+                      })}
+                    </Attachments>
+                  )}
 
-                    {message.parts.map((part, i) => {
-                      switch (part.type) {
-                        case "text":
-                          return (
-                            <div
-                              key={`${message.id}-text-${i}`}
-                              className="flex items-start gap-2">
-                              <MessageResponse>
-                                {part.text}
-                              </MessageResponse>
-                            </div>
-                          )
-                        case "data-generation":
-                          const data = (part as any).data;
-                          return (
-                            <GenerationCard
-                              key={`${message.id}-gen-${i}`}
-                              status={data.status}
-                              pages={data.pages}
-                              currentPageId={data.currentPageId}
-                              regeneratePage={data.regeneratePage}
-                            />
-                          )
+                  {message.parts.map((part, i) => {
+                    switch (part.type) {
+                      case "text":
+                        return (
+                          <div
+                            key={`${message.id}-text-${i}`}
+                            className="flex items-start gap-2">
+                            <MessageResponse>
+                              {part.text}
+                            </MessageResponse>
+                          </div>
+                        )
+                      case "data-generation":
+                        const data = (part as { data: GenerationCardData }).data;
+                        return (
+                          <GenerationCard
+                            key={`${message.id}-gen-${i}`}
+                            status={data.status}
+                            pages={data.pages}
+                            currentPageId={data.currentPageId}
+                            regeneratePage={data.regeneratePage}
+                          />
+                        )
 
-                        default:
-                          return null;
-                      }
-                    })}
-                  </MessageContent>
-                </Message>
-              </>
+                      default:
+                        return null;
+                    }
+                  })}
+                </MessageContent>
+              </Message>
             )
           })}
 
@@ -119,9 +124,10 @@ const ChatPanel = ({
           ) : null}
 
           {status === "error" && error && (
-            <ErrorAlert
-              title="Chat Error"
-              message={"Something went wrong"}
+            <ErrorState
+              className="min-h-[unset] px-4 py-5"
+              title="Chat error"
+              description={error.message || "Something went wrong while generating a response."}
             />
           )}
 
@@ -141,29 +147,6 @@ const ChatPanel = ({
         />
       </div>
     </div>
-  )
-}
-
-
-const ErrorAlert = ({ title, message }: {
-  title: string;
-  message: string;
-}) => {
-  return (
-    <>
-      <Alert
-        variant="destructive"
-        className="w-full"
-      >
-        <AlertCircleIcon className="h-4 w-4" />
-        <div>
-          <AlertTitle>{title}</AlertTitle>
-          <AlertDescription>
-            {message}
-          </AlertDescription>
-        </div>
-      </Alert>
-    </>
   )
 }
 

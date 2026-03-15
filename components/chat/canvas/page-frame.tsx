@@ -6,11 +6,12 @@ import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Code2, PaintbrushIcon, Trash2Icon, TrashIcon } from 'lucide-react';
+import { Code2, PaintbrushIcon, Trash2Icon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Spinner } from '@/components/ui/spinner';
 import { PageType } from '@/types/project';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState, ErrorState } from '@/components/ui/view-state';
 
 type PropsType = {
   page: PageType
@@ -103,7 +104,7 @@ const PageFrame = ({
             height: parseInt(ref.style.height)
           });
         }}
-        onClick={(e: any) => {
+        onClick={(e: React.MouseEvent) => {
           e.stopPropagation();
           if (page.isLoading) return
           if (toolMode === TOOL_MODE_ENUM.SELECT) {
@@ -169,7 +170,7 @@ const PageFrame = ({
                     <p className="text-xs font-semibold
                   mb-2 text-muted-foreground uppercase">Color Scheme</p>
                     <div className="flex flex-col gap-2">
-                      {colorTokens.map(({ label, value }: any) => (
+                      {colorTokens.map(({ label, value }) => (
                         <div
                           key={label}
                           className='flex items-center justify-between
@@ -223,6 +224,28 @@ const PageFrame = ({
               style={{ width: size.width, height: size.height }}>
               <Skeleton className="w-full h-8 bg-black/50 dark:bg-white/50" />
               <Skeleton className="w-1/2 h-10 bg-black/50 dark:bg-white/50 curs" />
+            </div>
+          ) : page.error ? (
+            <div
+              className="flex items-center justify-center bg-background p-8"
+              style={{ width: size.width, height: size.height }}
+            >
+              <ErrorState
+                title={`${page.name} failed to render`}
+                description={page.error}
+                className="min-h-[240px] max-w-lg"
+              />
+            </div>
+          ) : !page.htmlContent.trim() ? (
+            <div
+              className="flex items-center justify-center bg-background p-8"
+              style={{ width: size.width, height: size.height }}
+            >
+              <EmptyState
+                title={`${page.name} is empty`}
+                description="This page does not have any generated content yet."
+                className="min-h-[240px] max-w-lg"
+              />
             </div>
           ) : (
             <iframe

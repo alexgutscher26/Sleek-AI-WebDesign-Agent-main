@@ -7,6 +7,7 @@ import { Button } from "./ui/button"
 import { DarkModeToggle } from "./dark-mode-toggle"
 import { SignedIn, SignedOut, SignInButton, SignUpButton, useAuth, UserButton } from "@insforge/nextjs"
 import { Spinner } from "./ui/spinner"
+import GlobalCommandPalette from "./global-command-palette"
 
 const Header = () => {
   const pathname = usePathname()
@@ -27,6 +28,7 @@ const Header = () => {
         </div>
 
         <div className="flex items-center justify-end gap-3">
+          <GlobalCommandPalette />
           <DarkModeToggle />
 
           {!isLoaded ? <Spinner className="w-8 h-8" /> : (

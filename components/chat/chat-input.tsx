@@ -19,7 +19,7 @@ type ChatInputProps = {
   selectedPage?: PageType;
   setInput: (input: string) => void;
   onStop: () => void;
-  onSubmit: (message: PromptInputMessage, options?: any) => void;
+  onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
 }
 
 const ChatInput = ({

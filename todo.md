@@ -53,8 +53,8 @@
 - [ ] Add suspicious activity alerts and lockouts
 
 ## P1 - Core app UX improvements
-- [ ] Add robust empty/loading/error states for all views
-- [ ] Add global command palette for project actions
+- [x] Add robust empty/loading/error states for all views
+- [x] Add global command palette for project actions
 - [ ] Add keyboard shortcuts across chat + canvas
 - [ ] Add better mobile and tablet layouts for editor UI
 - [ ] Add undo/redo for prompt, page, and canvas operations

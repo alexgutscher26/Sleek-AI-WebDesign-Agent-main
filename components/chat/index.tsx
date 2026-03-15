@@ -14,10 +14,34 @@ import Canvas from "./canvas";
 import { PageType } from "@/types/project";
 import { useQuery } from "@tanstack/react-query";
 import { useCanvas } from "@/hooks/use-canvas";
+import { ErrorState } from "../ui/view-state";
 
 type PropsType = {
   isProjectPage?: boolean;
   slugId?: string;
+}
+
+type StreamDataPart = {
+  type: string;
+  data?: unknown;
+}
+
+type StreamPage = {
+  id: string;
+  name: string;
+  rootStyles: string;
+}
+
+type StreamPageCreated = {
+  id: string;
+  name: string;
+  rootStyles: string;
+  htmlContent: string;
+  error?: string;
+}
+
+type GenerationStreamData = {
+  status?: "error" | "canceled" | string;
 }
 
 const ChatInterface = ({
@@ -36,11 +60,30 @@ const ChatInterface = ({
   const [projectTitle, setProjectTitle] = useState<string | null>(null)
   const [pages, setPages] = useState<PageType[]>([]);
 
-  const { data: projectData, isLoading: isProjectLoading } = useQuery({
+  const {
+    data: projectData,
+    isLoading: isProjectLoading,
+    isError: isProjectError,
+    error: projectError,
+    refetch: refetchProject,
+  } = useQuery({
     queryKey: ["project", slugId],
     queryFn: async () => {
       const res = await fetch(`/api/project/${slugId}`);
-      if (!res.ok) throw new Error("Failed to fetch project");
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null) as {
+          error?: { code?: string; message?: string }
+        } | null;
+
+        const message = payload?.error?.code === "PROJECT_NOT_FOUND"
+          ? "This project could not be found."
+          : payload?.error?.code === "UNAUTHORIZED"
+            ? "Please sign in to access this project."
+            : payload?.error?.message || "Failed to fetch project.";
+
+        throw new Error(message);
+      }
+
       const payload = await res.json() as {
         success: true;
         data: { title: string; messages: UIMessage[]; pages: PageType[] }
@@ -68,16 +111,18 @@ const ChatInterface = ({
       }
     }),
     onData(dataPart) {
-      const part = dataPart as any;
+      const part = dataPart as StreamDataPart;
       const data = part.data
 
       switch (part.type) {
         case "data-project-title": {
-          if (data.title) setProjectTitle(data.title)
+          const title = (data as { title?: string } | undefined)?.title
+          if (title) setProjectTitle(title)
           break
         }
         case "data-pages-skeleton": {
-          const newPages = (data?.pages || []).map((page: any) => ({
+          const pagesData = ((data as { pages?: StreamPage[] } | undefined)?.pages || [])
+          const newPages = pagesData.map((page) => ({
             id: page.id,
             name: page.name,
             rootStyles: page.rootStyles,
@@ -86,15 +131,15 @@ const ChatInterface = ({
           }))
           setPages((prev) => {
             const existingIds = new Set(prev.map(p => p.id));
-            const toAdd = newPages.filter((p: any) => !existingIds.has(p.id));
+            const toAdd = newPages.filter((page) => !existingIds.has(page.id));
             return [...prev, ...toAdd]
           })
           break;
         }
 
         case "data-page-created": {
-          const page = data.page
-          const tempId = data.tempId
+          const page = (data as { page: StreamPageCreated }).page
+          const tempId = (data as { tempId?: string }).tempId
           setPages((prev) => {
             const idx = prev.findIndex(p => p.id === tempId ||
               p.id === page.id
@@ -116,7 +161,10 @@ const ChatInterface = ({
         }
 
         case "data-page-loading": {
-          const pageId = data.pageId;
+          const pageId = (data as { pageId?: string } | undefined)?.pageId;
+          if (!pageId) {
+            break;
+          }
           setPages(prev => {
             const idx = prev.findIndex(p => p.id === pageId);
             if (idx !== -1) {
@@ -131,10 +179,43 @@ const ChatInterface = ({
           });
           break;
         }
+        case "data-generation": {
+          const generationData = data as GenerationStreamData | undefined;
+          if (generationData?.status === "error") {
+            setPages((prev) =>
+              prev.map((page) =>
+                page.isLoading
+                  ? {
+                    ...page,
+                    isLoading: false,
+                    error: "This page could not be generated. Try sending the request again.",
+                  }
+                  : page
+              )
+            )
+          }
+
+          if (generationData?.status === "canceled") {
+            setPages((prev) => prev.filter((page) => !page.isLoading))
+          }
+
+          break;
+        }
       }
     },
     onError: (error) => {
       console.log(error)
+      setPages((prev) =>
+        prev.map((page) =>
+          page.isLoading
+            ? {
+              ...page,
+              isLoading: false,
+              error: "This page could not be generated because the request failed.",
+            }
+            : page
+        )
+      )
       toast.error("Failed to generate response")
     }
   })
@@ -145,8 +226,10 @@ const ChatInterface = ({
 
   useEffect(() => {
       if (projectData && slugId !== lastSyncedSlug.current) {
-          if (projectData.messages) setMessages(projectData.messages);
-          if (projectData.pages) setPages(projectData.pages);
+          queueMicrotask(() => {
+            if (projectData.messages) setMessages(projectData.messages);
+            if (projectData.pages) setPages(projectData.pages);
+          })
           lastSyncedSlug.current = slugId;
       }
   }, [projectData, slugId, setMessages]);
@@ -179,7 +262,10 @@ const ChatInterface = ({
 
   const isLoading = status === "submitted" || status === "streaming"
 
-  const onSubmit = async (message: PromptInputMessage, options: any = {}) => {
+  const onSubmit = async (
+    message: PromptInputMessage,
+    options: Record<string, unknown> = {}
+  ) => {
 
     if (!message.text.trim()) {
       toast.error("Please enter a message")
@@ -227,6 +313,22 @@ const ChatInterface = ({
         onStop={stop}
         onSubmit={onSubmit}
       />
+    )
+  }
+
+  if (isProjectPage && isProjectError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <ErrorState
+          className="max-w-xl"
+          title="Project unavailable"
+          description={projectError.message}
+          actionLabel="Retry"
+          onAction={() => refetchProject()}
+          secondaryActionLabel="Back to home"
+          onSecondaryAction={() => router.push("/")}
+        />
+      </div>
     )
   }
 
