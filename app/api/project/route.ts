@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { convertModelMessages, generateProjectTitle } from "@/app/action/action";
 import { getAuthServer } from "@/lib/insforge-server";
 import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMessage } from "ai";
-import { SLEEK_CHAT_PROMPT, SLEEK_INTENT_PROMPT, WEB_ANALYSIS_PROMPT, WEB_GENERATION_PROMPT } from "@/lib/prompt";
+import { GENERATION_MODE_PROMPT_GUIDANCE, SLEEK_CHAT_PROMPT, SLEEK_INTENT_PROMPT, WEB_ANALYSIS_PROMPT, WEB_GENERATION_PROMPT } from "@/lib/prompt";
 import { createValidationErrorResponse, parseJsonBody, parseProjectPostBody, RequestValidationError } from "@/lib/api-validation";
 import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
@@ -52,6 +52,45 @@ const emit = (
   })
 }
 
+const shouldRetryCompletion = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("unexpected end of json input") ||
+    message.includes("failed to get response") ||
+    message.includes("internal_error")
+  );
+}
+
+const createCompletionWithFallback = async (
+  insforge: any,
+  options: any,
+  fallbackModels: string[]
+) => {
+  const modelsToTry = [options.model, ...fallbackModels.filter((model) => model !== options.model)];
+  let lastError: unknown = null;
+
+  for (const model of modelsToTry) {
+    try {
+      return await insforge.ai.chat.completions.create({
+        ...options,
+        model
+      });
+    } catch (error) {
+      lastError = error;
+      console.log(`Completion failed for model: ${model}`, error);
+      if (!shouldRetryCompletion(error) || model === modelsToTry[modelsToTry.length - 1]) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 async function runGenerationWorker({
   insforge,
   writer,
@@ -59,6 +98,7 @@ async function runGenerationWorker({
   analysis,
   existingPages,
   latestUserMessage,
+  generationMode,
   checkAbort,
 }: any) {
   const { pages } = analysis;
@@ -113,7 +153,7 @@ async function runGenerationWorker({
       ? generationPages.slice(-2).map((p) => `<!--${p.name}-->\n${p.htmlContent}`).join('\n\n')
       : "No previous pages";
 
-    const result = await insforge.ai.chat.completions.create({
+    const result = await createCompletionWithFallback(insforge, {
       model: 'google/gemini-3.1-pro-preview',
       messages: [
         {
@@ -124,6 +164,7 @@ async function runGenerationWorker({
           role: 'user',
           content: `
  GENERATE HTML FOR THE FOLLOWING PAGE:
+- Generation Mode: ${generationMode}
 - Page Name: ${page.name}
 - Page Purpose: ${page.purpose}
 - Visual Description: ${page.visualDescription}
@@ -157,7 +198,10 @@ ${page.rootStyles}
       ],
       webSearch: { enabled: false },
       maxTokens: 30000
-    })
+    }, [
+      "google/gemini-2.5-pro",
+      "google/gemini-3-flash-preview"
+    ])
 
     let htmlContent = result.choices[0].message.content ?? ""
     const match = htmlContent.match(/<div[\s\S]*<\/div>/);
@@ -274,6 +318,7 @@ async function runRegenerateWorker({
   selectedPage,
   latestUserMessage,
   analysis,
+  generationMode,
   checkAbort,
 }: any) {
   if (!selectedPage) {
@@ -302,7 +347,7 @@ async function runRegenerateWorker({
     }
   }, { id: "gen-card" })
 
-  const result = await insforge.ai.chat.completions.create({
+  const result = await createCompletionWithFallback(insforge, {
     model: "google/gemini-3-flash-preview",
     messages: [
       {
@@ -315,6 +360,7 @@ async function runRegenerateWorker({
                 You are surgically editing an existing page.
                 RULE: Return the COMPLETE page HTML with ONLY the requested change applied. Every other section, component, and element must remain exactly as it is in the Current HTML.
 
+                GENERATION MODE: ${generationMode}
                 EDITING: "${selectedPage.name}"
                 USER REQUEST: "${latestUserMessage}"
                 CHANGE ONLY: ${analysis.pages[0].visualDescription}
@@ -324,7 +370,10 @@ async function runRegenerateWorker({
     ],
     webSearch: { enabled: false },
     maxTokens: 28000
-  });
+  }, [
+    "google/gemini-2.5-pro",
+    "google/gemini-2.5-flash-lite"
+  ]);
 
   let htmlContent = result.choices[0].message.content ?? '';
   const match = htmlContent.match(/<div[\s\S]*<\/div>/);
@@ -424,7 +473,7 @@ export async function POST(request: NextRequest) {
   const { signal } = request;
   try {
     const body = await parseJsonBody(request)
-    const { messages, slugId, selectedPageId } = parseProjectPostBody(body)
+    const { messages, slugId, selectedPageId, generationMode } = parseProjectPostBody(body)
 
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
@@ -648,6 +697,11 @@ export async function POST(request: NextRequest) {
                       text: `${imageParts.length > 0
                         ? `Reference image attached — extract EVERY detail: colors, layout, components, spacing. Match it precisely.\n\n`
                         : ''}
+    GENERATION MODE: ${generationMode}
+    MODE GUIDANCE:
+    ${GENERATION_MODE_PROMPT_GUIDANCE}
+    Build specifically for the "${generationMode}" surface type unless the user explicitly asks for a different format.
+
     ${selectedPage && isRegen
                           ? `EDITING THIS PAGE:\n- Name: ${selectedPage.name}\n- Current Styles:\n${selectedPage.rootStyles}\n- Current HTML:\n${selectedPage.htmlContent}\nBe surgical apply only requested changes.\n\n`
                           : selectedPage && !isRegen
@@ -693,6 +747,7 @@ export async function POST(request: NextRequest) {
                 selectedPage,
                 latestUserMessage,
                 analysis,
+                generationMode,
                 checkAbort,
               })
               return
@@ -706,6 +761,7 @@ export async function POST(request: NextRequest) {
               analysis,
               existingPages,
               latestUserMessage,
+              generationMode,
               checkAbort,
             });
           }

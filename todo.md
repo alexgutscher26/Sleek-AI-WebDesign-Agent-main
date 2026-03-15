@@ -76,7 +76,7 @@
 - [ ] Add multi-select and bulk page actions
 
 ## P1 - AI quality improvements
-- [ ] Add selectable generation modes (landing, dashboard, auth, docs, ecommerce)
+- [x] Add selectable generation modes (landing, dashboard, auth, docs, ecommerce)
 - [ ] Add style intensity controls (minimal, balanced, bold)
 - [ ] Add creativity controls (strict-to-prompt <-> exploratory)
 - [ ] Add layout complexity controls

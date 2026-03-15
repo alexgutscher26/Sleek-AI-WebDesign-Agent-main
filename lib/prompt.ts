@@ -14,6 +14,15 @@ export const BASE_VARIABLES = `
   --tracking-wide: 0.025em;
 `;
 
+export const GENERATION_MODE_PROMPT_GUIDANCE = `
+Generation modes:
+- landing: conversion-focused marketing page, strong hero, benefits, social proof, pricing or CTA.
+- dashboard: app shell, navigation, dense information hierarchy, widgets, tables, charts, filters.
+- auth: focused login/signup/onboarding flow, trust cues, form clarity, minimal distraction.
+- docs: documentation experience with sidebar/table of contents, readable content blocks, code examples, changelog or search affordances.
+- ecommerce: storefront, collection browsing, product merchandising, pricing, cart or product-detail commerce patterns.
+`.trim();
+
 
 export const SLEEK_INTENT_PROMPT = `
 You are an intent classifier for Sleek, an AI web design agent.

@@ -7,6 +7,7 @@ import {
   MAX_TOTAL_TEXT_LENGTH,
   MIME_EXTENSIONS
 } from "@/lib/request-limits"
+import { DEFAULT_GENERATION_MODE, GENERATION_MODE_SET, type GenerationMode } from "@/constants/generation-mode"
 
 const SLUG_ID_PATTERN = /^[A-Za-z0-9]{6,64}$/
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
@@ -52,6 +53,7 @@ export type ApiMessage = {
 export type ProjectPostBody = {
   slugId: string
   selectedPageId: string | null
+  generationMode: GenerationMode
   messages: ApiMessage[]
 }
 
@@ -97,6 +99,21 @@ const validateOptionalEntityId = (value: unknown, field: string) => {
   }
 
   return { ok: true as const, value }
+}
+
+const validateGenerationMode = (value: unknown, field = "generationMode") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: DEFAULT_GENERATION_MODE }
+  }
+
+  if (typeof value !== "string" || !GENERATION_MODE_SET.has(value as GenerationMode)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be one of: landing, dashboard, auth, docs, ecommerce." }
+    }
+  }
+
+  return { ok: true as const, value: value as GenerationMode }
 }
 
 const validateTextPart = (value: Record<string, unknown>, field: string) => {
@@ -265,10 +282,22 @@ const validateMessage = (value: unknown, index: number) => {
 
   const parts: ApiMessagePart[] = []
   const issues: ValidationIssue[] = []
+  const role = value.role as ApiMessage["role"]
 
   for (let partIndex = 0; partIndex < value.parts.length; partIndex += 1) {
-    const parsedPart = validateMessagePart(value.parts[partIndex], partIndex)
+    const rawPart = value.parts[partIndex]
+    const parsedPart = validateMessagePart(rawPart, partIndex)
     if (!parsedPart.ok) {
+      const rawType = isRecord(rawPart) && typeof rawPart.type === "string"
+        ? rawPart.type
+        : null
+
+      // Assistant messages can include UI-only metadata parts (for example data-generation).
+      // We ignore those on the server and keep only text/file parts for model context.
+      if (role === "assistant" && rawType && !ALLOWED_PART_TYPES.has(rawType)) {
+        continue
+      }
+
       issues.push(parsedPart.issue)
       continue
     }
@@ -279,10 +308,27 @@ const validateMessage = (value: unknown, index: number) => {
     return { ok: false as const, issues }
   }
 
+  if (parts.length === 0) {
+    if (role === "assistant") {
+      return {
+        ok: true as const,
+        value: {
+          role,
+          parts
+        }
+      }
+    }
+
+    return {
+      ok: false as const,
+      issue: { field: `${field}.parts`, message: "Each message must include at least one supported part." }
+    }
+  }
+
   return {
     ok: true as const,
     value: {
-      role: value.role as ApiMessage["role"],
+      role,
       parts
     }
   }
@@ -308,9 +354,11 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   const issues: ValidationIssue[] = []
   const slugIdResult = validateSlugId(input.slugId)
   const selectedPageIdResult = validateOptionalEntityId(input.selectedPageId, "selectedPageId")
+  const generationModeResult = validateGenerationMode(input.generationMode)
 
   if (!slugIdResult.ok) issues.push(slugIdResult.issue)
   if (!selectedPageIdResult.ok) issues.push(selectedPageIdResult.issue)
+  if (!generationModeResult.ok) issues.push(generationModeResult.issue)
 
   if (!Array.isArray(input.messages) || input.messages.length === 0) {
     issues.push({ field: "messages", message: "Messages must be a non-empty array." })
@@ -332,6 +380,9 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
             ? [parsedMessage.issue]
             : []
         issues.push(...parsedIssues)
+        continue
+      }
+      if (parsedMessage.value.parts.length === 0) {
         continue
       }
       messages.push(parsedMessage.value)
@@ -357,7 +408,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     ])
   }
 
-  if (!slugIdResult.ok || !selectedPageIdResult.ok) {
+  if (!slugIdResult.ok || !selectedPageIdResult.ok || !generationModeResult.ok) {
     throw new RequestValidationError([
       { field: "body", message: "Request validation failed." }
     ])
@@ -366,6 +417,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   return {
     slugId: slugIdResult.value,
     selectedPageId: selectedPageIdResult.value,
+    generationMode: generationModeResult.value,
     messages
   }
 }

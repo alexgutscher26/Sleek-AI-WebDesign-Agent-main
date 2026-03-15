@@ -11,22 +11,28 @@ import { useCanvas } from '@/hooks/use-canvas';
 import { Badge } from '../ui/badge';
 import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from '@/lib/request-limits';
 import { toast } from 'sonner';
+import { DEFAULT_GENERATION_MODE, GENERATION_MODES, type GenerationMode } from '@/constants/generation-mode';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 type ChatInputProps = {
+  generationMode: GenerationMode;
   input: string;
   isLoading: boolean;
   status: ChatStatus;
   selectedPage?: PageType;
+  setGenerationMode: (mode: GenerationMode) => void;
   setInput: (input: string) => void;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
 }
 
 const ChatInput = ({
+  generationMode,
   input,
   isLoading,
   status,
   selectedPage,
+  setGenerationMode,
   setInput,
   onStop,
   onSubmit,
@@ -35,6 +41,7 @@ const ChatInput = ({
   const [showAuthBanner, setShowAuthBanner] = useState(false)
 
   const { setSelectedPageId } = useCanvas()
+  const selectedMode = GENERATION_MODES.find((mode) => mode.value === generationMode)
 
   const handleSubmit = (message: PromptInputMessage) => {
     if (!isSignedIn) {
@@ -44,6 +51,7 @@ const ChatInput = ({
 
     setShowAuthBanner(false);
     onSubmit(message, {
+      generationMode,
       selectedPageId: selectedPage?.id
     });
     setSelectedPageId(null)
@@ -113,6 +121,35 @@ const ChatInput = ({
             </Badge>
           </div>
         )}
+        <div className='flex items-center justify-between gap-3 px-2 pt-2'>
+          <div className='px-1'>
+            <p className='text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground'>
+              Generation Mode
+            </p>
+          </div>
+          <Select
+            value={generationMode}
+            onValueChange={(value) => setGenerationMode(value as GenerationMode)}
+          >
+            <SelectTrigger className='h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs'>
+              <SelectValue placeholder={DEFAULT_GENERATION_MODE}>
+                {selectedMode?.label ?? DEFAULT_GENERATION_MODE}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent align="end">
+              {GENERATION_MODES.map((mode) => (
+                <SelectItem key={mode.value} value={mode.value}>
+                  <div className='flex flex-col'>
+                    <span>{mode.label}</span>
+                    <span className='text-[11px] text-muted-foreground'>
+                      {mode.description}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <PromptInputAttachmentsDisplay />
         <PromptInputBody>
           <PromptInputTextarea
