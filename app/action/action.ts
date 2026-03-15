@@ -1,15 +1,30 @@
 "use server"
 
 import { getAuthServer } from "@/lib/insforge-server"
+import { createChatCompletionWithRetries } from "@/lib/ai-retry"
 import type { InsForgeClient } from "@insforge/sdk"
 import { UIMessage } from "ai"
 import { parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation"
 import { getOwnedProjectBySlug } from "@/lib/project-access"
 
+type CompletionResponse = {
+  choices: Array<{
+    message: {
+      content: string
+    }
+  }>
+}
+
 export const generateProjectTitle = async (message: string, insforgeClient?: InsForgeClient) => {
   try {
     const insforge = insforgeClient ?? (await getAuthServer()).insforge
-    const result = await insforge.ai.chat.completions.create({
+    const createCompletion = <T,>(options: Record<string, unknown>) => (
+      insforge.ai.chat.completions.create(
+        options as Parameters<typeof insforge.ai.chat.completions.create>[0]
+      ) as Promise<T>
+    )
+
+    const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
       model: "google/gemini-2.5-flash-lite",
       messages: [
         {
@@ -26,6 +41,8 @@ export const generateProjectTitle = async (message: string, insforgeClient?: Ins
           content: message
         }
       ]
+    }, {
+      fallbackModels: ["google/gemini-2.5-pro"]
     })
     const text = result.choices[0].message.content;
     return text.trim() || "Untitled Project"
@@ -38,7 +55,10 @@ export const generateProjectTitle = async (message: string, insforgeClient?: Ins
 
 export const convertModelMessages = async (messages: UIMessage[]) => {
   const modelMessages = messages.map((message: UIMessage) => {
-    const contentParts: any[] = [];
+    const contentParts: Array<
+      | { type: "text"; text: string }
+      | { type: "image"; image: string }
+    > = [];
 
     for (const part of message.parts) {
       if (part.type === "text" && typeof part.text === "string"
@@ -75,7 +95,7 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
     if (!user) return { error: "Unauthorized" };
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
 
-    const { data: project } = await getOwnedProjectBySlug(
+    const { data: project } = await getOwnedProjectBySlug<{ id: string }>(
       insforge,
       user.id,
       parsedSlugId,

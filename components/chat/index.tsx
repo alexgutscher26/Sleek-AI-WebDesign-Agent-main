@@ -40,10 +40,37 @@ type StreamPageCreated = {
   rootStyles: string;
   htmlContent: string;
   error?: string;
+  isTemporary?: boolean;
 }
 
 type GenerationStreamData = {
   status?: "error" | "canceled" | string;
+}
+
+const fileToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result ?? ""));
+  reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+  reader.readAsDataURL(blob);
+})
+
+const serializeFilesForTransport = async (files: PromptInputMessage["files"]) => {
+  return Promise.all(
+    files.map(async (file) => {
+      if (file.url.startsWith("data:")) {
+        return file
+      }
+
+      const response = await fetch(file.url)
+      const blob = await response.blob()
+
+      return {
+        ...file,
+        size: blob.size,
+        url: await fileToDataUrl(blob)
+      }
+    })
+  )
 }
 
 const ChatInterface = ({
@@ -131,7 +158,8 @@ const ChatInterface = ({
             name: page.name,
             rootStyles: page.rootStyles,
             htmlContent: "",
-            isLoading: true
+            isLoading: true,
+            isTemporary: true
           }))
           setPages((prev) => {
             const existingIds = new Set(prev.map(p => p.id));
@@ -142,8 +170,10 @@ const ChatInterface = ({
         }
 
         case "data-page-created": {
-          const page = (data as { page: StreamPageCreated }).page
-          const tempId = (data as { tempId?: string }).tempId
+          const payload = data as { page: StreamPageCreated; tempId?: string; persisted?: boolean }
+          const page = payload.page
+          const tempId = payload.tempId
+          const persisted = payload.persisted === true
           setPages((prev) => {
             const idx = prev.findIndex(p => p.id === tempId ||
               p.id === page.id
@@ -152,13 +182,15 @@ const ChatInterface = ({
               const updated = [...prev];
               updated[idx] = {
                 ...page,
-                isLoading: false
+                isLoading: false,
+                isTemporary: !persisted
               };
               return updated;
             }
             return [...prev, {
               ...page,
-              isLoading: false
+              isLoading: false,
+              isTemporary: !persisted
             }]
           })
           break;
@@ -187,20 +219,40 @@ const ChatInterface = ({
           const generationData = data as GenerationStreamData | undefined;
           if (generationData?.status === "error") {
             setPages((prev) =>
-              prev.map((page) =>
-                page.isLoading
-                  ? {
-                    ...page,
-                    isLoading: false,
-                    error: "This page could not be generated. Try sending the request again.",
-                  }
-                  : page
-              )
+              prev.flatMap((page) => {
+                if (page.isTemporary) {
+                  return []
+                }
+
+                if (!page.isLoading) {
+                  return [page]
+                }
+
+                return [{
+                  ...page,
+                  isLoading: false,
+                }]
+              })
             )
           }
 
           if (generationData?.status === "canceled") {
-            setPages((prev) => prev.filter((page) => !page.isLoading))
+            setPages((prev) =>
+              prev.flatMap((page) => {
+                if (page.isTemporary) {
+                  return []
+                }
+
+                if (!page.isLoading) {
+                  return [page]
+                }
+
+                return [{
+                  ...page,
+                  isLoading: false
+                }]
+              })
+            )
           }
 
           break;
@@ -210,15 +262,20 @@ const ChatInterface = ({
     onError: (error) => {
       console.log(error)
       setPages((prev) =>
-        prev.map((page) =>
-          page.isLoading
-            ? {
-              ...page,
-              isLoading: false,
-              error: "This page could not be generated because the request failed.",
-            }
-            : page
-        )
+        prev.flatMap((page) => {
+          if (page.isTemporary) {
+            return []
+          }
+
+          if (!page.isLoading) {
+            return [page]
+          }
+
+          return [{
+            ...page,
+            isLoading: false,
+          }]
+        })
       )
       toast.error("Failed to generate response")
     }
@@ -281,14 +338,17 @@ const ChatInterface = ({
       setHasStarted(true)
     }
 
+    const serializedFiles = await serializeFilesForTransport(message.files)
+
     sendMessage(
       {
         text: message.text,
-        files: message.files
+        files: serializedFiles
       },
       {
         body: {
           ...options,
+          idempotencyKey: crypto.randomUUID().replace(/-/g, "_"),
           generationMode,
           slugId
         }

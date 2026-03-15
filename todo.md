@@ -21,14 +21,14 @@
 - [x] Add route-level schema validation for all APIs
 - [x] Add unified error response shape across APIs
 - [x] Add hard limits for prompt length and file upload size
-- [ ] Add MIME/type verification for uploaded files
-- [ ] Add abort-safe stream handling with no partial DB writes
-- [ ] Add retries for transient AI provider errors
-- [ ] Add fallback behavior when analysis JSON parsing fails
-- [ ] Add database transaction boundaries for multi-step writes
-- [ ] Prevent duplicate project creation race conditions
-- [ ] Add idempotency token support for generation requests
-- [ ] Add safe timeout handling for long-running generations
+- [x] Add MIME/type verification for uploaded files
+- [x] Add abort-safe stream handling with no partial DB writes
+- [x] Add retries for transient AI provider errors
+- [x] Add fallback behavior when analysis JSON parsing fails
+- [x] Add database transaction boundaries for multi-step writes
+- [x] Prevent duplicate project creation race conditions
+- [x] Add idempotency token support for generation requests
+- [x] Add safe timeout handling for long-running generations
 - [ ] Add guardrails for empty/invalid `messages` arrays
 - [ ] Add strict null checks and remove critical runtime `any`
 - [ ] Block dangerous HTML/script patterns before rendering in iframe
@@ -460,7 +460,6 @@
 - [ ] Create NPS + feature request feedback loop
 
 ## Immediate next sprint candidates (top picks)
-- [ ] `Sprint` Lock Tailwind to 3.4 and stabilize core editor
 - [ ] `Sprint` Add strict API validation + ownership checks
 - [ ] `Sprint` Add mobile app generation mode v1 (5 core screens)
 - [ ] `Sprint` Add app store screenshot generator v1 (iOS + Android packs)

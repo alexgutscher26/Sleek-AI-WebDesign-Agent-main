@@ -1,5 +1,5 @@
 import { getAuthServer } from "@/lib/insforge-server";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createValidationErrorResponse, parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation";
 import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest,
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
 
-    const { data: project, error } = await getOwnedProjectBySlug(
+    const { data: project, error } = await getOwnedProjectBySlug<{ id: string; title: string }>(
       insforge,
       user.id,
       slugId,

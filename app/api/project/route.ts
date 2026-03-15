@@ -1,20 +1,126 @@
 import { NextRequest } from "next/server";
 import { convertModelMessages, generateProjectTitle } from "@/app/action/action";
 import { getAuthServer } from "@/lib/insforge-server";
-import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMessage } from "ai";
-import { GENERATION_MODE_PROMPT_GUIDANCE, SLEEK_CHAT_PROMPT, SLEEK_INTENT_PROMPT, STYLE_INTENSITY_PROMPT_GUIDANCE, WEB_ANALYSIS_PROMPT, WEB_GENERATION_PROMPT } from "@/lib/prompt";
-import { createValidationErrorResponse, parseJsonBody, parseProjectPostBody, RequestValidationError } from "@/lib/api-validation";
+import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMessage, UIMessageStreamWriter } from "ai";
+import {
+  GENERATION_MODE_PROMPT_GUIDANCE,
+  SLEEK_CHAT_PROMPT,
+  SLEEK_INTENT_PROMPT,
+  STYLE_INTENSITY_PROMPT_GUIDANCE,
+  WEB_ANALYSIS_PROMPT,
+  WEB_GENERATION_PROMPT
+} from "@/lib/prompt";
+import {
+  ApiMessagePart,
+  createValidationErrorResponse,
+  parseJsonBody,
+  parseProjectPostBody,
+  RequestValidationError
+} from "@/lib/api-validation";
 import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
 import { DEFAULT_STYLE_INTENSITY } from "@/constants/style-intensity";
+import { createChatCompletionWithRetries, isAbortLikeError } from "@/lib/ai-retry";
+import { createHash } from "node:crypto";
 
 class AbortError extends Error {
   constructor() {
-    super('Request aborted');
-    this.name = 'AbortError';
+    super("Request aborted");
+    this.name = "AbortError";
   }
 }
 
+class GenerationTimeoutError extends Error {
+  constructor() {
+    super("Generation timed out");
+    this.name = "GenerationTimeoutError";
+  }
+}
+
+type RouteInsforge = Awaited<ReturnType<typeof getAuthServer>>["insforge"]
+
+type PersistedPage = {
+  id: string
+  name: string
+  rootStyles: string
+  htmlContent: string
+}
+
+type GeneratedPageDraft = {
+  tempId: string
+  name: string
+  rootStyles: string
+  htmlContent: string
+}
+
+type AnalysisPage = {
+  id: string
+  name: string
+  purpose: string
+  visualDescription: string
+  rootStyles: string
+}
+
+type AnalysisResult = {
+  rootStyles?: string
+  pages: AnalysisPage[]
+}
+
+type StreamWriter = UIMessageStreamWriter<UIMessage>
+
+type CompletionChunk = {
+  choices: Array<{
+    delta?: {
+      content?: string
+    }
+  }>
+}
+
+type CompletionResponse = {
+  choices: Array<{
+    message: {
+      content: string
+    }
+  }>
+}
+
+type StreamingCompletionResponse = AsyncIterable<CompletionChunk>
+
+type RequestKind = "chat" | "generate" | "regenerate"
+
+type StoredResponse =
+  | {
+      kind: "chat"
+      text: string
+    }
+  | {
+      kind: "generate"
+      pages: PersistedPage[]
+      summaryText: string
+    }
+  | {
+      kind: "regenerate"
+      page: PersistedPage
+      summaryText: string
+    }
+
+type GenerationRequestRecord = {
+  id: string
+  wasCreated: boolean
+  status: "in_progress" | "completed" | "failed" | "timed_out"
+  requestHash: string
+  requestKind: RequestKind
+  response: StoredResponse | null
+  error: string | null
+}
+
+type RouteDeps = {
+  insforge: RouteInsforge
+  projectId: string
+  latestUserParts: ApiMessagePart[]
+}
+
+const GENERATION_TIMEOUT_MS = 90_000
 
 export async function GET() {
   try {
@@ -37,7 +143,7 @@ export async function GET() {
 }
 
 const emit = (
-  writer: any,
+  writer: StreamWriter,
   type: string,
   data: object = {},
   options?: {
@@ -53,76 +159,621 @@ const emit = (
   })
 }
 
-const shouldRetryCompletion = (error: unknown) => {
-  if (!(error instanceof Error)) {
-    return false;
+const throwIfAborted = (signal: AbortSignal) => {
+  if (signal.aborted) {
+    throw new AbortError()
   }
-
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("unexpected end of json input") ||
-    message.includes("failed to get response") ||
-    message.includes("internal_error")
-  );
 }
 
-const createCompletionWithFallback = async (
-  insforge: any,
-  options: any,
-  fallbackModels: string[]
-) => {
-  const modelsToTry = [options.model, ...fallbackModels.filter((model) => model !== options.model)];
-  let lastError: unknown = null;
+const throwIfTimedOut = (timedOut: boolean) => {
+  if (timedOut) {
+    throw new GenerationTimeoutError()
+  }
+}
 
-  for (const model of modelsToTry) {
-    try {
-      return await insforge.ai.chat.completions.create({
-        ...options,
-        model
-      });
-    } catch (error) {
-      lastError = error;
-      console.log(`Completion failed for model: ${model}`, error);
-      if (!shouldRetryCompletion(error) || model === modelsToTry[modelsToTry.length - 1]) {
-        throw error;
+const createOperationSignal = (requestSignal: AbortSignal, timeoutMs: number) => {
+  const controller = new AbortController()
+  let timedOut = false
+  let cleanedUp = false
+
+  const cleanup = () => {
+    if (cleanedUp) {
+      return
+    }
+
+    cleanedUp = true
+    clearTimeout(timeoutId)
+    requestSignal.removeEventListener("abort", onAbort)
+  }
+
+  const abortWith = (reason: "request" | "timeout") => {
+    if (controller.signal.aborted) {
+      return
+    }
+
+    timedOut = reason === "timeout"
+    controller.abort()
+    cleanup()
+  }
+
+  const onAbort = () => abortWith("request")
+  const timeoutId = setTimeout(() => abortWith("timeout"), timeoutMs)
+
+  if (requestSignal.aborted) {
+    abortWith("request")
+  } else {
+    requestSignal.addEventListener("abort", onAbort, { once: true })
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup,
+    didTimeOut: () => timedOut
+  }
+}
+
+const createRequestHash = (input: object) => (
+  createHash("sha256")
+    .update(JSON.stringify(input))
+    .digest("hex")
+)
+
+const parseAnalysisResult = (
+  analysisText: string,
+  options: {
+    latestUserMessage: string
+    generationMode: string
+    styleIntensity: string
+    selectedPage?: PersistedPage | null
+    isRegen: boolean
+  }
+): AnalysisResult => {
+  try {
+    const jsonStart = analysisText.indexOf("{");
+    const jsonEnd = analysisText.lastIndexOf("}");
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error("No JSON object found")
+    }
+
+    const cleanJson = analysisText.substring(jsonStart, jsonEnd + 1);
+    const parsed = JSON.parse(cleanJson) as AnalysisResult
+
+    if (!parsed.pages || parsed.pages.length === 0) {
+      throw new Error("No pages in analysis payload")
+    }
+
+    return parsed
+  } catch (error) {
+    console.log("Analysis parse fallback", error)
+
+    if (options.isRegen && options.selectedPage) {
+      return {
+        rootStyles: options.selectedPage.rootStyles,
+        pages: [
+          {
+            id: options.selectedPage.id,
+            name: options.selectedPage.name,
+            purpose: `Refine ${options.selectedPage.name}`,
+            visualDescription: options.latestUserMessage,
+            rootStyles: options.selectedPage.rootStyles
+          }
+        ]
       }
+    }
+
+    return {
+      pages: [
+        {
+          id: generateId(),
+          name: "Home",
+          purpose: `${options.generationMode} experience`,
+          visualDescription: `${options.latestUserMessage}\nStyle intensity: ${options.styleIntensity}`,
+          rootStyles: ""
+        }
+      ]
+    }
+  }
+}
+
+const createInsforgeCompletion = (insforge: RouteInsforge) => <T,>(options: Record<string, unknown>) => (
+  insforge.ai.chat.completions.create(
+    options as Parameters<RouteInsforge["ai"]["chat"]["completions"]["create"]>[0]
+  ) as Promise<T>
+)
+
+const safeDeleteProject = async (insforge: RouteInsforge, projectId: string) => {
+  try {
+    await insforge.database.from("messages").delete().eq("projectId", projectId)
+    await insforge.database.from("pages").delete().eq("projectId", projectId)
+    await insforge.database.from("projects").delete().eq("id", projectId)
+  } catch (cleanupError) {
+    console.log(cleanupError, "Project cleanup failed")
+  }
+}
+
+const isMissingRpcError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return message.includes("could not find the function") || message.includes("function") && message.includes("does not exist")
+}
+
+const getOrCreateProjectAtomic = async (
+  insforge: RouteInsforge,
+  userId: string,
+  slugId: string,
+  title: string
+) => {
+  try {
+    const { data, error } = await insforge.database.rpc("get_or_create_project", {
+      p_user_id: userId,
+      p_slug_id: slugId,
+      p_title: title
+    })
+
+    if (error) {
+      throw error
+    }
+
+    const project = Array.isArray(data) ? data[0] : data
+
+    if (!project) {
+      throw new Error("Failed to get or create project")
+    }
+
+    return {
+      project: project as { id: string; title: string; slugId: string },
+      wasCreated: Boolean((project as { wasCreated?: boolean }).wasCreated),
+      usedRpc: true
+    }
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      if (error instanceof Error && error.message.includes("PROJECT_OWNERSHIP_CONFLICT")) {
+        throw error
+      }
+
+      console.log(error, "get_or_create_project RPC failed; falling back")
+    }
+
+    return {
+      project: null,
+      wasCreated: false,
+      usedRpc: false
+    }
+  }
+}
+
+const beginGenerationRequest = async (
+  insforge: RouteInsforge,
+  userId: string,
+  projectId: string,
+  selectedPageId: string | null,
+  idempotencyKey: string | null,
+  requestHash: string,
+  requestKind: RequestKind
+) => {
+  if (!idempotencyKey) {
+    return {
+      record: null,
+      supported: false
     }
   }
 
-  throw lastError;
+  try {
+    const { data, error } = await insforge.database.rpc("begin_generation_request", {
+      p_user_id: userId,
+      p_project_id: projectId,
+      p_selected_page_id: selectedPageId,
+      p_idempotency_key: idempotencyKey,
+      p_request_hash: requestHash,
+      p_request_kind: requestKind
+    })
+
+    if (error) {
+      throw error
+    }
+
+    const record = (Array.isArray(data) ? data[0] : data) as GenerationRequestRecord | null
+
+    return {
+      record,
+      supported: true
+    }
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      throw error
+    }
+
+    return {
+      record: null,
+      supported: false
+    }
+  }
+}
+
+const finishGenerationRequest = async (
+  insforge: RouteInsforge,
+  requestId: string | null,
+  status: GenerationRequestRecord["status"],
+  response: StoredResponse | null,
+  errorText: string | null
+) => {
+  if (!requestId) {
+    return
+  }
+
+  try {
+    await insforge.database.rpc("finish_generation_request", {
+      p_request_id: requestId,
+      p_status: status,
+      p_response: response,
+      p_error: errorText
+    })
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      console.log(error, "Failed to update generation request")
+    }
+  }
+}
+
+const replayStoredResponse = async (
+  writer: StreamWriter,
+  response: StoredResponse
+) => {
+  switch (response.kind) {
+    case "chat": {
+      const textId = generateId()
+      writer.write({ type: "text-start", id: textId })
+      if (response.text) {
+        writer.write({ type: "text-delta", id: textId, delta: response.text })
+      }
+      writer.write({ type: "text-end", id: textId })
+      return
+    }
+    case "generate": {
+      emit(writer, "generation", {
+        status: "complete",
+        pages: response.pages.map((page) => ({
+          id: page.id,
+          name: page.name,
+          done: true
+        }))
+      }, { id: "gen-card" })
+
+      response.pages.forEach((page) => {
+        emit(writer, "page-created", {
+          persisted: true,
+          page: {
+            ...page,
+            isLoading: false
+          }
+        }, { transient: true })
+      })
+
+      const textId = generateId()
+      writer.write({ type: "text-start", id: textId })
+      if (response.summaryText) {
+        writer.write({ type: "text-delta", id: textId, delta: response.summaryText })
+      }
+      writer.write({ type: "text-end", id: textId })
+      return
+    }
+    case "regenerate": {
+      emit(writer, "page-created", {
+        persisted: true,
+        page: {
+          ...response.page,
+          isLoading: false
+        }
+      }, { transient: true })
+
+      emit(writer, "generation", {
+        status: "complete",
+        regeneratePage: {
+          id: response.page.id,
+          name: response.page.name,
+          done: true
+        }
+      }, { id: "gen-card" })
+
+      const textId = generateId()
+      writer.write({ type: "text-start", id: textId })
+      if (response.summaryText) {
+        writer.write({ type: "text-delta", id: textId, delta: response.summaryText })
+      }
+      writer.write({ type: "text-end", id: textId })
+      return
+    }
+  }
+}
+
+const persistMessagePair = async (
+  insforge: RouteInsforge,
+  projectId: string,
+  latestUserParts: ApiMessagePart[],
+  assistantParts: Array<{ type: string; text?: string; id?: string; data?: unknown }>
+) => {
+  try {
+    const { error } = await insforge.database.rpc("commit_message_pair", {
+      p_project_id: projectId,
+      p_user_parts: latestUserParts,
+      p_assistant_parts: assistantParts
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      throw error
+    }
+  }
+
+  const { error } = await insforge.database.from("messages").insert([
+    {
+      projectId,
+      role: "user",
+      parts: latestUserParts
+    },
+    {
+      projectId,
+      role: "assistant",
+      parts: assistantParts
+    }
+  ])
+
+  if (error) {
+    throw error
+  }
+}
+
+const persistGeneratedState = async (
+  deps: RouteDeps,
+  generatedPages: GeneratedPageDraft[],
+  summaryText: string
+) => {
+  const { insforge, projectId, latestUserParts } = deps
+
+  try {
+    const { data, error } = await insforge.database.rpc("commit_generation_result", {
+      p_project_id: projectId,
+      p_user_parts: latestUserParts,
+      p_assistant_parts: [
+        {
+          type: "data-generation",
+          id: "gen-card",
+          data: {
+            status: "complete",
+            pages: generatedPages.map((page, index) => ({
+              id: `temp-${index}`,
+              name: page.name,
+              done: true
+            }))
+          }
+        },
+        { type: "text", text: summaryText }
+      ],
+      p_pages: generatedPages.map((page) => ({
+        name: page.name,
+        rootStyles: page.rootStyles,
+        htmlContent: page.htmlContent
+      }))
+    })
+
+    if (error) {
+      throw error
+    }
+
+    const savedPages = (Array.isArray(data) ? data : []) as PersistedPage[]
+
+    if (savedPages.length > 0) {
+      return savedPages
+    }
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      throw error
+    }
+  }
+
+  const { data: savedPages, error: pagesError } = await insforge.database.from("pages").insert(
+    generatedPages.map((page) => ({
+      projectId,
+      name: page.name,
+      rootStyles: page.rootStyles,
+      htmlContent: page.htmlContent
+    }))
+  ).select("id, name, rootStyles, htmlContent")
+
+  if (pagesError || !savedPages) {
+    throw pagesError ?? new Error("Failed to save generated pages")
+  }
+
+  try {
+    await persistMessagePair(insforge, projectId, latestUserParts, [
+      {
+        type: "data-generation",
+        id: "gen-card",
+        data: {
+          status: "complete",
+          pages: generatedPages.map((page, index) => ({
+            id: savedPages[index].id,
+            name: page.name,
+            done: true
+          }))
+        }
+      },
+      { type: "text", text: summaryText }
+    ])
+  } catch (error) {
+    const savedPageIds = savedPages.map((page: PersistedPage) => page.id)
+    if (savedPageIds.length > 0) {
+      await insforge.database.from("pages").delete().in("id", savedPageIds)
+    }
+    throw error
+  }
+
+  return savedPages as PersistedPage[]
+}
+
+const persistRegeneratedState = async (
+  deps: RouteDeps,
+  selectedPage: PersistedPage,
+  nextPage: Pick<PersistedPage, "htmlContent" | "rootStyles">,
+  summaryText: string
+) => {
+  const { insforge, projectId, latestUserParts } = deps
+
+  try {
+    const { data, error } = await insforge.database.rpc("commit_regeneration_result", {
+      p_project_id: projectId,
+      p_page_id: selectedPage.id,
+      p_html_content: nextPage.htmlContent,
+      p_root_styles: nextPage.rootStyles,
+      p_user_parts: latestUserParts,
+      p_assistant_parts: [
+        {
+          type: "data-generation",
+          id: "gen-card",
+          data: {
+            status: "complete",
+            regeneratePage: {
+              id: selectedPage.id,
+              name: selectedPage.name,
+              done: true
+            }
+          }
+        },
+        { type: "text", text: summaryText }
+      ]
+    })
+
+    if (error) {
+      throw error
+    }
+
+    const updatedPage = (Array.isArray(data) ? data[0] : data) as PersistedPage | null
+
+    if (updatedPage) {
+      return updatedPage
+    }
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      throw error
+    }
+  }
+
+  const previousPage = {
+    htmlContent: selectedPage.htmlContent,
+    rootStyles: selectedPage.rootStyles
+  }
+
+  const { data: updatedPage, error: updateError } = await insforge.database.from("pages")
+    .update(nextPage)
+    .eq("id", selectedPage.id)
+    .eq("projectId", projectId)
+    .select("id, name, rootStyles, htmlContent")
+    .single()
+
+  if (updateError || !updatedPage) {
+    throw updateError ?? new Error("Failed to save regenerated page")
+  }
+
+  try {
+    await persistMessagePair(insforge, projectId, latestUserParts, [
+      {
+        type: "data-generation",
+        id: "gen-card",
+        data: {
+          status: "complete",
+          regeneratePage: {
+            id: updatedPage.id,
+            name: updatedPage.name,
+            done: true
+          }
+        }
+      },
+      { type: "text", text: summaryText }
+    ])
+  } catch (error) {
+    await insforge.database.from("pages")
+      .update(previousPage)
+      .eq("id", selectedPage.id)
+      .eq("projectId", projectId)
+    throw error
+  }
+
+  return updatedPage as PersistedPage
+}
+
+const streamTextResponse = async (
+  writer: StreamWriter,
+  result: AsyncIterable<CompletionChunk>,
+  signal: AbortSignal
+) => {
+  const textId = generateId();
+  let fullText = "";
+
+  writer.write({ type: "text-start", id: textId })
+
+  for await (const chunk of result) {
+    throwIfAborted(signal)
+    const delta = chunk.choices[0]?.delta?.content || ""
+    fullText += delta
+
+    if (delta) {
+      writer.write({ type: "text-delta", id: textId, delta })
+    }
+  }
+
+  writer.write({ type: "text-end", id: textId });
+  return fullText
 }
 
 async function runGenerationWorker({
   insforge,
   writer,
   projectId,
+  latestUserParts,
+  latestUserMessage,
   analysis,
   existingPages,
-  latestUserMessage,
   generationMode,
   styleIntensity,
-  checkAbort,
-}: any) {
+  signal,
+}: {
+  insforge: RouteInsforge
+  writer: StreamWriter
+  projectId: string
+  latestUserParts: ApiMessagePart[]
+  latestUserMessage: string
+  analysis: AnalysisResult
+  existingPages: PersistedPage[] | null
+  generationMode: string
+  styleIntensity: string
+  signal: AbortSignal
+}): Promise<{ savedPages: PersistedPage[]; summaryText: string }> {
   const { pages } = analysis;
-  console.log(pages?.length, pages, "pages")
+  const createCompletion = createInsforgeCompletion(insforge)
 
-  if (!analysis || !pages || pages?.length === 0) {
+  if (!analysis || !pages || pages.length === 0) {
     throw new Error("No pages generated");
   }
 
-  // emit to the chat
   emit(writer, "generation", {
     status: "generating",
-    pages: pages.map((page: any) => ({
+    pages: pages.map((page) => ({
       id: page.id,
       name: page.name,
       done: false
     }))
   }, { id: "gen-card" })
 
-  // emit pages
   emit(writer, "pages-skeleton", {
-    pages: pages.map((page: any) => ({
+    pages: pages.map((page) => ({
       id: page.id,
       name: page.name,
       rootStyles: page.rootStyles,
@@ -131,39 +782,40 @@ async function runGenerationWorker({
     }))
   }, { transient: true });
 
-  const generationPages: { name: string; htmlContent: string }[] = [] = [
-    ...(existingPages?.map((page: any) => (
-      { name: page.name, htmlContent: page.htmlContent }
-    ))) || []
+  const generationPages: Array<{ name: string; htmlContent: string }> = [
+    ...(existingPages?.map((page) => ({
+      name: page.name,
+      htmlContent: page.htmlContent
+    })) ?? [])
   ]
+  const generatedDrafts: GeneratedPageDraft[] = []
 
   for (const page of pages) {
-    checkAbort()
+    throwIfAborted(signal)
 
     emit(writer, "generation", {
       status: "generating",
       currentPageId: page.id,
-      pages: pages.map((page: any) => ({
-        id: page.id,
-        name: page.name,
-        done: generationPages.some((gp: any) => gp.name === page.name)
+      pages: pages.map((currentPage) => ({
+        id: currentPage.id,
+        name: currentPage.name,
+        done: generatedDrafts.some((draft) => draft.tempId === currentPage.id)
       }))
     }, { id: "gen-card" })
 
-
     const previousPagesContext = generationPages.length > 0
-      ? generationPages.slice(-2).map((p) => `<!--${p.name}-->\n${p.htmlContent}`).join('\n\n')
+      ? generationPages.slice(-2).map((p) => `<!--${p.name}-->\n${p.htmlContent}`).join("\n\n")
       : "No previous pages";
 
-    const result = await createCompletionWithFallback(insforge, {
-      model: 'google/gemini-3.1-pro-preview',
+    const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+      model: "google/gemini-3.1-pro-preview",
       messages: [
         {
           role: "system",
           content: WEB_GENERATION_PROMPT,
         },
         {
-          role: 'user',
+          role: "user",
           content: `
          GENERATE HTML FOR THE FOLLOWING PAGE:
 - Generation Mode: ${generationMode}
@@ -171,7 +823,7 @@ async function runGenerationWorker({
 - Page Name: ${page.name}
 - Page Purpose: ${page.purpose}
 - Visual Description: ${page.visualDescription}
-- Theme Variables for this page (already injected in :root — reference via var(), do NOT redeclare):
+- Theme Variables for this page (already injected in :root - reference via var(), do NOT redeclare):
 ${page.rootStyles}
 - Context from previous pages : ${previousPagesContext}
 
@@ -201,44 +853,87 @@ ${page.rootStyles}
       ],
       webSearch: { enabled: false },
       maxTokens: 30000
-    }, [
-      "google/gemini-2.5-pro",
-      "google/gemini-3-flash-preview"
-    ])
+    }, {
+      fallbackModels: [
+        "google/gemini-2.5-pro",
+        "google/gemini-3-flash-preview"
+      ],
+      signal
+    })
 
     let htmlContent = result.choices[0].message.content ?? ""
     const match = htmlContent.match(/<div[\s\S]*<\/div>/);
     htmlContent = match ? match[0] : htmlContent;
     htmlContent = htmlContent.replace(/```/g, "")
 
-    const { data: savedPage, error } = await insforge.database.from("pages").insert([
-      {
-        projectId,
-        name: page.name,
-        rootStyles: page.rootStyles,
-        htmlContent
-      }
-    ]).select().single();
+    const draft = {
+      tempId: page.id,
+      name: page.name,
+      rootStyles: page.rootStyles,
+      htmlContent
+    }
 
-    if (error) console.log(error, "Page failed to save")
-
+    generatedDrafts.push(draft)
     generationPages.push({
       name: page.name,
-      htmlContent: htmlContent
+      htmlContent
     })
-
-    emit(writer, "generation", {
-      status: "generating",
-      currentPageId: page.id,
-      pages: pages.map((page: any) => ({
-        id: page.id,
-        name: page.name,
-        done: generationPages.some((gp: any) => gp.name === page.name)
-      }))
-    }, { id: "gen-card" })
 
     emit(writer, "page-created", {
       tempId: page.id,
+      persisted: false,
+      page: {
+        id: page.id,
+        name: page.name,
+        rootStyles: page.rootStyles,
+        htmlContent,
+        isLoading: false
+      }
+    }, { transient: true });
+  }
+
+  const summaryResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
+    model: "google/gemini-2.5-flash-lite",
+    messages: [
+      {
+        role: "system",
+        content: `You are Sleek, an AI web design agent. You just finished building pages.
+Write 1-2 sentences in first person. Natural, confident. No questions. No "let me know".`
+      },
+      {
+        role: "user",
+        content: `Designed: ${pages.map((page) => page.name).join(", ")} for: "${latestUserMessage}". Summarize briefly.`
+      }
+    ],
+    stream: true,
+    webSearch: { enabled: false }
+  }, {
+    fallbackModels: ["google/gemini-2.5-pro"],
+    signal
+  })
+
+  const fullSummaryText = await streamTextResponse(writer, summaryResult, signal)
+  throwIfAborted(signal)
+
+  const savedPages = await persistGeneratedState(
+    { insforge, projectId, latestUserParts },
+    generatedDrafts,
+    fullSummaryText
+  )
+
+  emit(writer, "generation", {
+    status: "complete",
+    pages: savedPages.map((page) => ({
+      id: page.id,
+      name: page.name,
+      done: true
+    }))
+  }, { id: "gen-card" })
+
+  savedPages.forEach((savedPage, index) => {
+    emit(writer, "page-created", {
+      tempId: generatedDrafts[index].tempId,
+      persisted: true,
       page: {
         id: savedPage.id,
         name: savedPage.name,
@@ -247,71 +942,12 @@ ${page.rootStyles}
         isLoading: false
       }
     }, { transient: true });
-  }
-
-  emit(writer, "generation", {
-    status: "complete",
-    pages: pages.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      done: true
-    }))
-  }, { id: "gen-card" })
-
-  const summaryResult = await insforge.ai.chat.completions.create({
-    model: 'google/gemini-2.5-flash-lite',
-    messages: [
-      {
-        role: "system",
-        content: `You are Sleek, an AI web design agent. You just finished building pages.
-Write 1-2 sentences in first person. Natural, confident. No questions. No "let me know".`
-      },
-      {
-        role: 'user',
-        content: `Designed: ${pages.map((p: any) => p.name).join(', ')} for: "${latestUserMessage}". Summarize briefly.`
-      }
-
-    ],
-    stream: true,
-    webSearch: { enabled: false }
   })
 
-  const summaryId = generateId();
-  let fullSummaryText = "";
-
-  writer.write({ type: "text-start", id: summaryId })
-  for await (const chunk of summaryResult) {
-    const delta = chunk.choices[0].delta?.content || "";
-    fullSummaryText += delta
-    if (delta) {
-      writer.write({ type: "text-delta", id: summaryId, delta: delta })
-    }
+  return {
+    savedPages,
+    summaryText: fullSummaryText
   }
-  writer.write({ type: "text-end", id: summaryId });
-
-  checkAbort()
-  await insforge.database.from("messages").insert([
-    {
-      projectId,
-      role: "assistant",
-      parts: [
-        {
-          type: "data-generation",
-          id: "gen-card",
-          data: {
-            status: "complete",
-            pages: pages.map((p: any) => ({
-              id: p.id,
-              name: p.name,
-              done: true
-            }))
-          }
-        },
-        { type: "text", text: fullSummaryText }
-      ]
-    }
-  ])
-
 }
 
 async function runRegenerateWorker({
@@ -319,21 +955,27 @@ async function runRegenerateWorker({
   writer,
   projectId,
   selectedPage,
+  latestUserParts,
   latestUserMessage,
   analysis,
   generationMode,
   styleIntensity,
-  checkAbort,
-}: any) {
-  if (!selectedPage) {
-    writer.write({
-      type: "error",
-      errorText: "No Page was selected "
-    })
-    return
-  }
+  signal,
+}: {
+  insforge: RouteInsforge
+  writer: StreamWriter
+  projectId: string
+  selectedPage: PersistedPage
+  latestUserParts: ApiMessagePart[]
+  latestUserMessage: string
+  analysis: AnalysisResult
+  generationMode: string
+  styleIntensity: string
+  signal: AbortSignal
+}): Promise<{ page: PersistedPage; summaryText: string }> {
+  const createCompletion = createInsforgeCompletion(insforge)
 
-  if (!analysis || analysis?.pages?.length === 0) {
+  if (!analysis || analysis.pages?.length === 0) {
     throw new Error("No pages generated");
   }
 
@@ -351,7 +993,7 @@ async function runRegenerateWorker({
     }
   }, { id: "gen-card" })
 
-  const result = await createCompletionWithFallback(insforge, {
+  const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
     model: "google/gemini-3-flash-preview",
     messages: [
       {
@@ -375,28 +1017,54 @@ async function runRegenerateWorker({
     ],
     webSearch: { enabled: false },
     maxTokens: 28000
-  }, [
-    "google/gemini-2.5-pro",
-    "google/gemini-2.5-flash-lite"
-  ]);
+  }, {
+    fallbackModels: [
+      "google/gemini-2.5-pro",
+      "google/gemini-2.5-flash-lite"
+    ],
+    signal
+  });
 
-  let htmlContent = result.choices[0].message.content ?? '';
+  let htmlContent = result.choices[0].message.content ?? "";
   const match = htmlContent.match(/<div[\s\S]*<\/div>/);
   htmlContent = match ? match[0] : htmlContent;
-  htmlContent = htmlContent.replace(/```/g, '');
+  htmlContent = htmlContent.replace(/```/g, "");
 
-  const { data: updatedPage, error } = await insforge.database.from("pages")
-    .update({
+  const summaryResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
+    model: "google/gemini-2.5-flash-lite",
+    messages: [
+      {
+        role: "system",
+        content: `You are Sleek, an AI web design agent. You just finished building pages.
+Write 1-2 sentences in first person. Natural, confident. No questions. No "let me know".`
+      },
+      {
+        role: "user",
+        content: `Updated: ${selectedPage.name} for: "${latestUserMessage}". Summarize briefly.`
+      }
+    ],
+    stream: true,
+    webSearch: { enabled: false }
+  }, {
+    fallbackModels: ["google/gemini-2.5-pro"],
+    signal
+  })
+
+  const fullSummaryText = await streamTextResponse(writer, summaryResult, signal)
+  throwIfAborted(signal)
+
+  const updatedPage = await persistRegeneratedState(
+    { insforge, projectId, latestUserParts },
+    selectedPage,
+    {
       htmlContent,
-      rootStyles: analysis.rootStyles
-    })
-    .eq("id", selectedPage.id).select().single()
-
-  if (error) {
-    console.log(error, "Failed to update selected Page")
-  }
+      rootStyles: analysis.rootStyles ?? selectedPage.rootStyles
+    },
+    fullSummaryText
+  )
 
   emit(writer, "page-created", {
+    persisted: true,
     page: {
       id: updatedPage.id,
       name: updatedPage.name,
@@ -415,70 +1083,17 @@ async function runRegenerateWorker({
     }
   }, { id: "gen-card" })
 
-
-  const summaryResult = await insforge.ai.chat.completions.create({
-    model: 'google/gemini-2.5-flash-lite',
-    messages: [
-      {
-        role: "system",
-        content: `You are Sleek, an AI web design agent. You just finished building pages.
-Write 1-2 sentences in first person. Natural, confident. No questions. No "let me know".`
-      },
-      {
-        role: 'user',
-        content: `Updated: ${updatedPage.name} for: "${latestUserMessage}". Summarize briefly.`
-      }
-
-    ],
-    stream: true,
-    webSearch: { enabled: false }
-  })
-
-  const summaryId = generateId();
-  let fullSummaryText = "";
-
-  writer.write({ type: "text-start", id: summaryId })
-  for await (const chunk of summaryResult) {
-    const delta = chunk.choices[0].delta?.content || "";
-    fullSummaryText += delta
-    if (delta) {
-      writer.write({ type: "text-delta", id: summaryId, delta: delta })
-    }
+  return {
+    page: updatedPage,
+    summaryText: fullSummaryText
   }
-  writer.write({ type: "text-end", id: summaryId });
-
-  checkAbort()
-  await insforge.database.from("messages").insert([
-    {
-      projectId,
-      role: "assistant",
-      parts: [
-        {
-          type: "data-generation",
-          id: "gen-card",
-          data: {
-            status: "complete",
-            regeneratePage: {
-              id: updatedPage.id,
-              name: updatedPage.name,
-              done: true
-            }
-          }
-        },
-        { type: "text", text: fullSummaryText }
-      ]
-    }
-  ])
-
-
 }
-
 
 export async function POST(request: NextRequest) {
   const { signal } = request;
   try {
     const body = await parseJsonBody(request)
-    const { messages, slugId, selectedPageId, generationMode, styleIntensity } = parseProjectPostBody(body)
+    const { messages, slugId, selectedPageId, idempotencyKey, generationMode, styleIntensity } = parseProjectPostBody(body)
 
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
@@ -495,12 +1110,14 @@ export async function POST(request: NextRequest) {
       ])
     }
 
-    let { data: project } = await getOwnedProjectBySlug(
+    let { data: project } = await getOwnedProjectBySlug<{ id: string; title: string; slugId?: string }>(
       insforge,
       user.id,
       slugId,
       "id, title"
     );
+
+    let createdProjectId: string | null = null
 
     if (!project) {
       const { data: conflictingProject, error: conflictingProjectError } = await insforge.database
@@ -517,28 +1134,60 @@ export async function POST(request: NextRequest) {
         return createErrorResponse(404, "PROJECT_NOT_FOUND", "Project not found")
       }
 
-      console.log("creating new project");
       const title = await generateProjectTitle(latestUserMessage, insforge);
-      const { data: newProject, error } = await insforge
-        .database
-        .from("projects")
-        .insert([
-          {
-            slugId,
-            title,
-            userId: user.id
+      const atomicProjectResult = await getOrCreateProjectAtomic(
+        insforge,
+        user.id,
+        slugId,
+        title
+      )
+
+      if (atomicProjectResult.project) {
+        project = atomicProjectResult.project
+        if (atomicProjectResult.wasCreated) {
+          createdProjectId = atomicProjectResult.project.id
+        }
+      } else {
+        const { data: newProject, error } = await insforge
+          .database
+          .from("projects")
+          .insert([
+            {
+              slugId,
+              title,
+              userId: user.id
+            }
+          ])
+          .select("id, title")
+          .single()
+
+        if (error) {
+          const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+          if (errorMessage.includes("duplicate") || errorMessage.includes("unique")) {
+            const { data: racedProject } = await getOwnedProjectBySlug<{ id: string; title: string }>(
+              insforge,
+              user.id,
+              slugId,
+              "id, title"
+            )
+
+            if (!racedProject) {
+              throw error
+            }
+
+            project = racedProject
+          } else {
+            throw error
           }
-        ])
-        .select()
-        .single()
-
-      if (error) throw error;
-      if (!newProject) throw new Error("Failed to create project");
-
-      project = newProject
+        } else {
+          if (!newProject) throw new Error("Failed to create project");
+          project = newProject
+          createdProjectId = newProject.id
+        }
+      }
     }
 
-    const projectId = project!.id;
+    const projectId = project.id;
 
     const { data: existingPages } = await insforge.database.from("pages")
       .select("id, name, rootStyles, htmlContent")
@@ -546,23 +1195,18 @@ export async function POST(request: NextRequest) {
       .order("createdAt", { ascending: true })
       .limit(2)
 
-    const hasExistingPages = existingPages && existingPages.length
-
-    await insforge.database.from("messages").insert([
-      {
-        projectId,
-        role: "user",
-        parts: lastMessage.parts
-      }
-    ])
+    const hasExistingPages = Boolean(existingPages && existingPages.length)
 
     const modelMessages = await convertModelMessages(messages.slice(10) as UIMessage[])
 
-    const imageParts = lastMessage.parts.filter((part) => part.type === "file" && part.mediaType.startsWith("image/"))
-      .map((p: any) => ({
+    const imageParts = lastMessage.parts
+      .filter((part): part is Extract<ApiMessagePart, { type: "file" }> => (
+        part.type === "file" && part.mediaType.startsWith("image/")
+      ))
+      .map((part) => ({
         type: "image_url" as const,
         image_url: {
-          url: p.url
+          url: part.url
         }
       }))
 
@@ -577,131 +1221,139 @@ export async function POST(request: NextRequest) {
       return createErrorResponse(404, "PAGE_NOT_FOUND", "Page not found")
     }
 
-    const checkAbort = () => {
-      if (signal.aborted) throw new AbortError()
-
-    }
+    const operationSignal = createOperationSignal(signal, GENERATION_TIMEOUT_MS)
+    const requestHash = createRequestHash({
+      slugId,
+      selectedPageId,
+      generationMode,
+      styleIntensity,
+      messages
+    })
 
     const uiStream = createUIMessageStream({
       generateId: generateId,
       async execute({ writer }) {
         let genCardEmitted = false;
+        let hasCommittedWrites = false
+        let generationRequestId: string | null = null
+        const createCompletion = createInsforgeCompletion(insforge)
+
         try {
+          emit(writer, "project-title", {
+            title: project.title
+          }, { id: "proj-title", transient: true })
 
-          if (project?.title) {
-            emit(writer, "project-title", {
-              title: project.title
-            }, { id: "proj-title", transient: true, })
-            // writer.write({
-            //   type: "data-project-title",
-            //   data: {
-            //     title: project.title
-            //   },
-            //   transient: true,
-            // })
+          throwIfAborted(operationSignal.signal)
+          throwIfTimedOut(operationSignal.didTimeOut())
 
-            checkAbort();
-            const result = await insforge.ai.chat.completions.create({
-              model: 'anthropic/claude-sonnet-4.5',
+          const intentResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+            model: "anthropic/claude-sonnet-4.5",
+            messages: [
+              {
+                role: "system",
+                content: SLEEK_INTENT_PROMPT,
+              },
+              {
+                role: "user",
+                content: `${latestUserMessage}\nCLASSIFY THE INTENT NOW. ONE WORD ONLY`
+              }
+            ]
+          }, {
+            fallbackModels: ["google/gemini-2.5-pro"],
+            signal: operationSignal.signal
+          })
+
+          const classifyOutput = (intentResult.choices[0].message.content).trim().toLowerCase();
+          const firstWord = classifyOutput.split(" ")[0];
+          const validIntents = ["chat", "generate", "regenerate"];
+          const intent = (validIntents.includes(firstWord) ? firstWord : "chat") as RequestKind
+
+          const requestState = await beginGenerationRequest(
+            insforge,
+            user.id,
+            projectId,
+            selectedPageId,
+            idempotencyKey,
+            requestHash,
+            intent
+          )
+
+          generationRequestId = requestState.record?.id ?? null
+
+          if (requestState.record?.status === "completed" && requestState.record.response) {
+            await replayStoredResponse(writer, requestState.record.response)
+            hasCommittedWrites = true
+            return
+          }
+
+          if (requestState.record && !requestState.record.wasCreated && requestState.record.status === "in_progress") {
+            writer.write({ type: "error", errorText: "This request is already being processed." })
+            return
+          }
+
+          if (intent === "chat") {
+            const chatResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
+              model: "google/gemini-2.5-pro",
               messages: [
                 {
                   role: "system",
-                  content: SLEEK_INTENT_PROMPT,
+                  content: SLEEK_CHAT_PROMPT
                 },
-                {
-                  role: "user",
-                  content: `${latestUserMessage}\nCLASSIFY THE INTENT NOW. ONE WORD ONLY`
-                }
-              ]
+                ...modelMessages
+              ],
+              stream: true,
+              webSearch: { enabled: false }
+            }, {
+              fallbackModels: ["anthropic/claude-sonnet-4.5"],
+              signal: operationSignal.signal
             })
 
-            const classify_output = (result.choices[0].message.content).trim().toLowerCase();
+            const chatText = await streamTextResponse(writer, chatResult, operationSignal.signal)
+            throwIfAborted(operationSignal.signal)
+            throwIfTimedOut(operationSignal.didTimeOut())
 
-            const firstWord = classify_output.split(' ')[0];
-            const validIntents = ["chat", "generate", "regenerate"];
-            const intent = validIntents.includes(firstWord) ?
-              firstWord as any : 'chat'
-
-            const classification = { intent }
-
-            // CLASSIFICATION MATCHES CHAT
-            if (classification.intent === "chat") {
-              const chatResult = await insforge.ai.chat.completions.create({
-                model: "google/gemini-2.5-pro",
-                messages: [
-                  {
-                    role: "system",
-                    content: SLEEK_CHAT_PROMPT
-                  },
-                  ...modelMessages
-                ],
-                stream: true,
-                webSearch: { enabled: false }
-              })
-
-              const chatId = generateId();
-              let chatText = "";
-
-              writer.write({ type: "text-start", id: chatId })
-
-              for await (const chunk of chatResult) {
-                checkAbort();
-                const delta = chunk.choices[0]?.delta?.content || "";
-                chatText += delta;
-                if (delta) {
-                  writer.write({
-                    type: "text-delta",
-                    id: chatId,
-                    delta
-                  })
-                }
-              }
-
-              writer.write({ type: "text-end", id: chatId })
-              checkAbort();
-
-              await insforge.database.from("messages").insert([{
-                projectId,
-                role: "assistant",
-                parts: [
-                  { type: "text", text: chatText }
-                ]
-              }])
-
-              return;
-            }
-
-            const isRegen = classification.intent === "regenerate" && !!selectedPage
-
-            console.log(classification, "classification", isRegen)
-
-            emit(writer, "generation", {
-              status: "analyzing",
-              page: []
-            },
+            await persistMessagePair(insforge, projectId, lastMessage.parts, [
+              { type: "text", text: chatText }
+            ])
+            await finishGenerationRequest(
+              insforge,
+              generationRequestId,
+              "completed",
               {
-                id: "gen-card"
-              }
+                kind: "chat",
+                text: chatText
+              },
+              null
             )
+            hasCommittedWrites = true
+            return
+          }
 
-            genCardEmitted = true
+          const isRegen = intent === "regenerate" && !!selectedPage
 
-            const analysisResult = await insforge.ai.chat.completions.create({
-              model: 'anthropic/claude-sonnet-4.5',
-              messages: [
-                {
-                  role: "system",
-                  content: WEB_ANALYSIS_PROMPT
-                },
-                {
-                  role: "user",
-                  content: [
-                    ...imageParts,
-                    {
-                      type: "text",
-                      text: `${imageParts.length > 0
-                        ? `Reference image attached — extract EVERY detail: colors, layout, components, spacing. Match it precisely.\n\n`
-                        : ''}
+          emit(writer, "generation", {
+            status: "analyzing",
+            page: []
+          }, { id: "gen-card" })
+
+          genCardEmitted = true
+
+          const analysisResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+            model: "anthropic/claude-sonnet-4.5",
+            messages: [
+              {
+                role: "system",
+                content: WEB_ANALYSIS_PROMPT
+              },
+              {
+                role: "user",
+                content: [
+                  ...imageParts,
+                  {
+                    type: "text",
+                    text: `${imageParts.length > 0
+                      ? "Reference image attached - extract EVERY detail: colors, layout, components, spacing. Match it precisely.\n\n"
+                      : ""}
     GENERATION MODE: ${generationMode}
     MODE GUIDANCE:
     ${GENERATION_MODE_PROMPT_GUIDANCE}
@@ -713,85 +1365,140 @@ export async function POST(request: NextRequest) {
     Match the requested intensity with clear visual restraint or drama in both layout and styling.
 
     ${selectedPage && isRegen
-                          ? `EDITING THIS PAGE:\n- Name: ${selectedPage.name}\n- Current Styles:\n${selectedPage.rootStyles}\n- Current HTML:\n${selectedPage.htmlContent}\nBe surgical apply only requested changes.\n\n`
-                          : selectedPage && !isRegen
-                            ? `STYLE REFERENCE (match this brand DNA):
+                        ? `EDITING THIS PAGE:\n- Name: ${selectedPage.name}\n- Current Styles:\n${selectedPage.rootStyles}\n- Current HTML:\n${selectedPage.htmlContent}\nBe surgical apply only requested changes.\n\n`
+                        : selectedPage && !isRegen
+                          ? `STYLE REFERENCE (match this brand DNA):
                               - Name: ${selectedPage.name}
                               - Brand Colors & Fonts: See Styles below.
                               - Logo/Header Pattern: ${selectedPage.htmlContent.substring(0, 1500)}
-                              - Styles:${selectedPage.rootStyles}\n\n` : ''}
+                              - Styles:${selectedPage.rootStyles}\n\n`
+                          : ""}
         ${hasExistingPages && !isRegen
-                          ? `EXISTING PAGES (do NOT recreate):\n${existingPages!.map((p: any) => `- ${p.name}\n${p.rootStyles}`).join('\n')}\n\n`
-                          : ''}
+                        ? `EXISTING PAGES (do NOT recreate):\n${existingPages!.map((page) => `- ${page.name}\n${page.rootStyles}`).join("\n")}\n\n`
+                        : ""}
         USER REQUEST: "${latestUserMessage}"OUTPUT RAW JSON ONLY.`.trim()
-                    }
+                  }
+                ]
+              }
+            ],
+            maxTokens: 28000,
+          }, {
+            fallbackModels: ["google/gemini-2.5-pro"],
+            signal: operationSignal.signal
+          });
 
-                  ]
-                }
-              ],
-              maxTokens: 28000,
-            });
+          throwIfAborted(operationSignal.signal)
+          throwIfTimedOut(operationSignal.didTimeOut())
 
-            checkAbort();
+          const analysisText = analysisResult.choices[0].message.content || "{}"
+          const analysis = parseAnalysisResult(analysisText, {
+            latestUserMessage,
+            generationMode,
+            styleIntensity,
+            selectedPage,
+            isRegen
+          })
 
-            let analysis: any;
-            const analysisText = analysisResult.choices[0].message.content || '{}'
-
-            try {
-              const jsonStart = analysisText.indexOf('{');
-              const jsonEnd = analysisText.lastIndexOf('}');
-              if (jsonStart === -1 || jsonEnd === -1) throw new Error("No JSON object found");
-              const cleanJson = analysisText.substring(jsonStart, jsonEnd + 1);
-              analysis = JSON.parse(cleanJson)
-            } catch (error) {
-              console.log("Analysis error", error);
-              throw new Error("Failed to parse json output");
-            }
-
-            if (isRegen && selectedPageId) {
-              checkAbort();
-              await runRegenerateWorker({
-                insforge,
-                writer,
-                projectId,
-                selectedPage,
-                latestUserMessage,
-                analysis,
-                generationMode,
-                styleIntensity,
-                checkAbort,
-              })
-              return
-            }
-
-            checkAbort();
-            await runGenerationWorker({
+          if (isRegen && selectedPageId) {
+            const regenerated = await runRegenerateWorker({
               insforge,
               writer,
               projectId,
-              analysis,
-              existingPages,
+              selectedPage,
+              latestUserParts: lastMessage.parts,
               latestUserMessage,
+              analysis,
               generationMode,
               styleIntensity,
-              checkAbort,
-            });
+              signal: operationSignal.signal,
+            })
+            await finishGenerationRequest(
+              insforge,
+              generationRequestId,
+              "completed",
+              {
+                kind: "regenerate",
+                page: regenerated.page,
+                summaryText: regenerated.summaryText
+              },
+              null
+            )
+            hasCommittedWrites = true
+            return
           }
+
+          const generated = await runGenerationWorker({
+            insforge,
+            writer,
+            projectId,
+            latestUserParts: lastMessage.parts,
+            latestUserMessage,
+            analysis,
+            existingPages,
+            generationMode,
+            styleIntensity,
+            signal: operationSignal.signal,
+          });
+          await finishGenerationRequest(
+            insforge,
+            generationRequestId,
+            "completed",
+            {
+              kind: "generate",
+              pages: generated.savedPages,
+              summaryText: generated.summaryText
+            },
+            null
+          )
+          hasCommittedWrites = true
         } catch (error) {
           console.log(error)
-          if (error instanceof AbortError) {
+
+          if (createdProjectId && !hasCommittedWrites) {
+            await safeDeleteProject(insforge, createdProjectId)
+          }
+
+          if (error instanceof GenerationTimeoutError || operationSignal.didTimeOut()) {
+            await finishGenerationRequest(
+              insforge,
+              generationRequestId,
+              "timed_out",
+              null,
+              "Generation timed out before completion."
+            )
+            emit(writer, "generation", { status: "error" }, { id: "gen-card" });
+            writer.write({ type: "error", errorText: "Generation timed out. Please try again." })
+            return
+          }
+
+          if (error instanceof AbortError || isAbortLikeError(error)) {
+            await finishGenerationRequest(
+              insforge,
+              generationRequestId,
+              "failed",
+              null,
+              "Request canceled by client."
+            )
             if (genCardEmitted) {
               emit(writer, "generation", { status: "canceled" }, {
                 id: "gen-card"
               })
-              writer.write({ type: "abort", })
+              writer.write({ type: "abort" })
             }
             return
           }
 
-          emit(writer, 'generation', { status: 'error' }, { id: 'gen-card' });
-
+          await finishGenerationRequest(
+            insforge,
+            generationRequestId,
+            "failed",
+            null,
+            error instanceof Error ? error.message : "Unknown generation error"
+          )
+          emit(writer, "generation", { status: "error" }, { id: "gen-card" });
           writer.write({ type: "error", errorText: "Something went wrong" })
+        } finally {
+          operationSignal.cleanup()
         }
       }
     })

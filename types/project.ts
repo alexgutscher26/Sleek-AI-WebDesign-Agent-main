@@ -4,6 +4,7 @@ export type PageType = {
   rootStyles: string;
   htmlContent: string;
   isLoading: boolean;
+  isTemporary?: boolean;
   error?: string;
   projectId?: string;
   createdAt?: string;

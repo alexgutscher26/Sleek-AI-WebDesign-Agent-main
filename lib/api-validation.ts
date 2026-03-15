@@ -7,11 +7,13 @@ import {
   MAX_TOTAL_TEXT_LENGTH,
   MIME_EXTENSIONS
 } from "@/lib/request-limits"
+import { verifyInlineFilePayload } from "@/lib/file-validation"
 import { DEFAULT_GENERATION_MODE, GENERATION_MODE_SET, type GenerationMode } from "@/constants/generation-mode"
 import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITY_SET, type StyleIntensity } from "@/constants/style-intensity"
 
 const SLUG_ID_PATTERN = /^[A-Za-z0-9]{6,64}$/
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/
 const ALLOWED_MESSAGE_ROLES = new Set(["system", "user", "assistant"])
 const ALLOWED_PART_TYPES = new Set(["text", "file"])
 const ALLOWED_FILE_MIME_TYPES_SET = new Set(ALLOWED_FILE_MIME_TYPES)
@@ -54,6 +56,7 @@ export type ApiMessage = {
 export type ProjectPostBody = {
   slugId: string
   selectedPageId: string | null
+  idempotencyKey: string | null
   generationMode: GenerationMode
   styleIntensity: StyleIntensity
   messages: ApiMessage[]
@@ -97,6 +100,21 @@ const validateOptionalEntityId = (value: unknown, field: string) => {
     return {
       ok: false as const,
       issue: { field, message: "Must be a valid identifier string." }
+    }
+  }
+
+  return { ok: true as const, value }
+}
+
+const validateOptionalIdempotencyKey = (value: unknown, field = "idempotencyKey") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: null }
+  }
+
+  if (typeof value !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(value)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be a valid idempotency key." }
     }
   }
 
@@ -226,15 +244,18 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
     }
   }
 
-  if (value.url.startsWith("data:")) {
-    const declaredMimeType = value.url.slice(5).split(";")[0]
-    if (declaredMimeType !== value.mediaType) {
-      return {
-        ok: false as const,
-        issue: {
-          field,
-          message: "File data URL MIME type does not match the provided media type."
-        }
+  const verification = verifyInlineFilePayload(
+    value.url,
+    value.mediaType,
+    typeof value.size === "number" ? value.size : undefined
+  )
+
+  if (!verification.ok) {
+    return {
+      ok: false as const,
+      issue: {
+        field,
+        message: verification.message
       }
     }
   }
@@ -371,11 +392,13 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   const issues: ValidationIssue[] = []
   const slugIdResult = validateSlugId(input.slugId)
   const selectedPageIdResult = validateOptionalEntityId(input.selectedPageId, "selectedPageId")
+  const idempotencyKeyResult = validateOptionalIdempotencyKey(input.idempotencyKey)
   const generationModeResult = validateGenerationMode(input.generationMode)
   const styleIntensityResult = validateStyleIntensity(input.styleIntensity)
 
   if (!slugIdResult.ok) issues.push(slugIdResult.issue)
   if (!selectedPageIdResult.ok) issues.push(selectedPageIdResult.issue)
+  if (!idempotencyKeyResult.ok) issues.push(idempotencyKeyResult.issue)
   if (!generationModeResult.ok) issues.push(generationModeResult.issue)
   if (!styleIntensityResult.ok) issues.push(styleIntensityResult.issue)
 
@@ -427,7 +450,13 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     ])
   }
 
-  if (!slugIdResult.ok || !selectedPageIdResult.ok || !generationModeResult.ok || !styleIntensityResult.ok) {
+  if (
+    !slugIdResult.ok ||
+    !selectedPageIdResult.ok ||
+    !idempotencyKeyResult.ok ||
+    !generationModeResult.ok ||
+    !styleIntensityResult.ok
+  ) {
     throw new RequestValidationError([
       { field: "body", message: "Request validation failed." }
     ])
@@ -436,6 +465,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   return {
     slugId: slugIdResult.value,
     selectedPageId: selectedPageIdResult.value,
+    idempotencyKey: idempotencyKeyResult.value,
     generationMode: generationModeResult.value,
     styleIntensity: styleIntensityResult.value,
     messages
