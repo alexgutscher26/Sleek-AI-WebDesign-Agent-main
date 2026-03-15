@@ -7,6 +7,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { InsforgeProvider } from "@/components/insforge-provider";
 import { QueryProvider } from "@/components/query-provider";
+import InsforgeSetupWizard from "@/components/insforge-setup-wizard";
+import { getInsforgeSetupStatus } from "@/lib/insforge-config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,12 +30,14 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const insforgeSetup = getInsforgeSetupStatus();
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <InsforgeProvider>
+        <InsforgeProvider enabled={insforgeSetup.configured}>
           <QueryProvider>
             <NuqsAdapter>
               <ThemeProvider
@@ -44,6 +48,7 @@ export default function RootLayout({
               >
                 <TooltipProvider>
                   {children}
+                  <InsforgeSetupWizard status={insforgeSetup} />
 
                   <Toaster richColors />
                 </TooltipProvider>

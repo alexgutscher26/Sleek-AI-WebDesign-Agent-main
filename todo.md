@@ -66,7 +66,7 @@
 - [ ] Add sort options for recents (newest, updated, title)
 - [ ] Add compact/comfortable density modes
 - [ ] Add onboarding tour with sample prompts
-- [ ] Add first-run setup wizard for Insforge config
+- [x] Add first-run setup wizard for Insforge config
 - [ ] Add inline hints for regenerate intent usage
 - [ ] Add side-by-side compare for regenerated pages
 - [ ] Add generation history timeline per page
