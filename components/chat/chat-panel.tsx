@@ -55,7 +55,7 @@ const ChatPanel = ({
   selectedPage
 }: PropsType) => {
   return (
-    <div className="relative flex flex-col flex-1 overflow-hidden">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <Conversation className={className}>
         <ConversationContent>
           {isProjectLoading ? (
@@ -144,7 +144,7 @@ const ChatPanel = ({
         </ConversationContent>
       </Conversation>
 
-      <div className="p-4 bg-background border-t">
+      <div className="border-t bg-background p-3 md:p-4">
         <ChatInput
           input={input}
           generationMode={generationMode}

@@ -22,9 +22,9 @@ const CanvasControls = ({
 
   return (
     <div
-      className="absolute bottom-10 -translate-x-1/2
-      left-1/2 flex items-center gap-2 rounded-full border
-      bg-card py-1.5 px-4 shadow-md text-foreground
+      className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2
+      items-center gap-1.5 rounded-full border bg-card/95 px-3 py-1.5
+      text-foreground shadow-md backdrop-blur sm:bottom-6 sm:gap-2 sm:px-4
       "
     >
 
@@ -59,7 +59,7 @@ const CanvasControls = ({
         </Button>
       </div>
 
-      <Separator orientation="vertical" className="h-5!" />
+      <Separator orientation="vertical" className="h-5 hidden sm:block!" />
       <div className="flex items-center gap-1">
         <Button
           size="icon-sm"
@@ -73,7 +73,7 @@ const CanvasControls = ({
         >
           <MinusIcon />
         </Button>
-        <div className="min-w-10 text-center text-sm">{zoomPercent}%</div>
+        <div className="min-w-10 text-center text-xs sm:text-sm">{zoomPercent}%</div>
         <Button
           size="icon-sm"
           variant="ghost"

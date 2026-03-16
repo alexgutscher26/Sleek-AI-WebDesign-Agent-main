@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { PromptInputMessage } from "../ai-elements/prompt-input";
 import NewProjectChat from "./new-project-chat";
 import { Button } from "../ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, LayoutPanelLeft, MonitorSmartphone } from "lucide-react";
 import ChatPanel from "./chat-panel";
 import Canvas from "./canvas";
 import { PageType } from "@/types/project";
@@ -117,6 +117,7 @@ const ChatInterface = ({
   const [hasStarted, setHasStarted] = useState(isProjectPage);
   const [projectTitle, setProjectTitle] = useState<string | null>(null)
   const [pages, setPages] = useState<PageType[]>([]);
+  const [activeCompactPane, setActiveCompactPane] = useState<"chat" | "canvas">("chat");
 
   const {
     data: projectData,
@@ -406,6 +407,13 @@ const ChatInterface = ({
   }
 
   const selectedPage = pages.find((p) => p.id === selectedPageId);
+  const pageCount = pages.length
+
+  useEffect(() => {
+    if (pageCount > 0) {
+      setActiveCompactPane("canvas")
+    }
+  }, [pageCount])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -495,16 +503,42 @@ const ChatInterface = ({
 
 
   return (
-    <div className="flex h-screen w-full overflow-hidden">
-      <div className="flex relative w-full max-w-md border-r
-      border-border
-      ">
+    <div className="flex h-[100dvh] w-full flex-col overflow-hidden lg:flex-row">
+      <div className="border-b border-border bg-background/95 px-3 py-2 backdrop-blur md:px-4 lg:hidden">
+        <div className="flex items-center gap-2 rounded-full border border-border/70 bg-muted/30 p-1">
+          <Button
+            variant={activeCompactPane === "chat" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1 rounded-full"
+            onClick={() => setActiveCompactPane("chat")}
+          >
+            <LayoutPanelLeft className="size-4" />
+            Chat
+          </Button>
+          <Button
+            variant={activeCompactPane === "canvas" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1 rounded-full"
+            onClick={() => setActiveCompactPane("canvas")}
+          >
+            <MonitorSmartphone className="size-4" />
+            Canvas {pageCount > 0 ? `(${pageCount})` : ""}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] md:grid-rows-[minmax(320px,42svh)_minmax(0,1fr)] lg:flex lg:min-w-0">
+      <div
+        className={`relative min-h-0 border-border bg-background
+        md:border-b lg:flex lg:h-full lg:w-full lg:max-w-md lg:border-b-0 lg:border-r
+        ${activeCompactPane === "canvas" ? "hidden md:flex" : "flex"}`}
+      >
         {/* {ProjectTitle} */}
-        <div className="w-full absolute left-0 top-0 z-10 pb-2
-        bg-background
+        <div className="absolute left-0 top-0 z-10 w-full bg-background/95 pb-2
+        backdrop-blur
         ">
           <div role="button"
-            className="flex items-center gap-2 cursor-pointer!"
+            className="flex items-center gap-2 px-3 pt-2 cursor-pointer! md:px-4"
             onClick={handleBack}
           >
             <Button variant="secondary"
@@ -513,14 +547,14 @@ const ChatInterface = ({
               <ArrowLeft />
             </Button>
           <h5 className="font-semibold tracking-tight
-            truncate pr-4">
+            truncate pr-4 text-sm md:text-base">
               {projectTitle || projectData?.title || "Untitled Project"}
             </h5>
           </div>
         </div>
 
         <ChatPanel
-          className="h-full pt-8"
+          className="h-full pt-12 md:pt-13"
           messages={messages}
           input={input}
           setInput={setInput}
@@ -538,13 +572,17 @@ const ChatInterface = ({
         />
       </div>
 
-      <div className="flex-1">
+      <div
+        className={`min-h-0 min-w-0 bg-background lg:flex-1
+        ${activeCompactPane === "chat" ? "hidden md:block" : "block"}`}
+      >
         <Canvas
           pages={pages}
           setPages={setPages}
           slugId={slugId}
           isProjectLoading={isProjectLoading}
         />
+      </div>
       </div>
     </div>
   )

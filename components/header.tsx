@@ -27,7 +27,12 @@ const Header = () => {
           {!isProjectPage && <Logo />}
         </div>
 
-        <div className="flex items-center justify-end gap-3">
+        <div
+          className={cn(
+            "flex items-center justify-end gap-3",
+            isProjectPage && "hidden md:flex"
+          )}
+        >
           <GlobalCommandPalette />
           <DarkModeToggle />
 
