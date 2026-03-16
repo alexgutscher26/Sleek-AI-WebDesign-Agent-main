@@ -14,12 +14,14 @@ const Header = () => {
   const { isLoaded } = useAuth();
 
   const isProjectPage = pathname.startsWith('/project/')
+  const isHomePage = pathname === "/"
 
   return (
-    <header className="w-full">
+    <header className={cn("w-full", isHomePage && "pointer-events-none absolute inset-x-0 top-0 z-40")}>
       <div className={cn(`w-full flex py-3.5 px-8
          items-center justify-between
          `,
+        isHomePage && "pointer-events-auto mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8",
         isProjectPage && "absolute top-0 z-50 px-2 py-1 right-0 w-auto"
       )}>
 

@@ -1,4 +1,5 @@
 import Header from "@/components/header";
+import { Suspense } from "react";
 
 export default function HomeLayout({
   children,
@@ -7,7 +8,9 @@ export default function HomeLayout({
 }>) {
   return (
     <main>
-      <Header />
+      <Suspense fallback={null}>
+        <Header />
+      </Suspense>
       <div
         className="overflow-hidden"
       >{children}</div>

@@ -39,8 +39,8 @@
 ## P0 - Security hardening
 - [x] Add rate limiting by user + IP for generation endpoints
 - [x] Add abuse prevention for repeated regenerate spam
-- [ ] Add CSRF strategy for sensitive server actions
-- [ ] Add Content Security Policy headers
+- [x] Add CSRF strategy for sensitive server actions
+- [x] Add Content Security Policy headers
 - [ ] Add clickjacking/XSS protection headers
 - [ ] Add secure cookie settings verification
 - [ ] Add audit logs for delete/update actions

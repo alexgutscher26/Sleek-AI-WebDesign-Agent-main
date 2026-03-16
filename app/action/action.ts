@@ -5,6 +5,7 @@ import { createChatCompletionWithRetries } from "@/lib/ai-retry"
 import { UIMessage } from "ai"
 import { parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation"
 import { getOwnedProjectBySlug } from "@/lib/project-access"
+import { assertTrustedServerActionRequest } from "@/lib/request-security"
 import type { PageMetadata, PageType } from "@/types/project"
 
 type CompatClient = Awaited<ReturnType<typeof getAuthServer>>["insforge"]
@@ -98,6 +99,11 @@ export const convertModelMessages = async (messages: UIMessage[]) => {
 
 export const deletePageAction = async (slugId: string, pageId: string) => {
   try {
+    const trustedRequest = await assertTrustedServerActionRequest({
+      requireNavigationHeaders: true
+    })
+    if (!trustedRequest.ok) return { error: trustedRequest.message }
+
     const { user, insforge } = await getAuthServer();
     if (!user) return { error: "Unauthorized" };
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
@@ -131,6 +137,11 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
 
 export const renamePageAction = async (slugId: string, pageId: string, name: string) => {
   try {
+    const trustedRequest = await assertTrustedServerActionRequest({
+      requireNavigationHeaders: true
+    })
+    if (!trustedRequest.ok) return { error: trustedRequest.message }
+
     const { user, insforge } = await getAuthServer();
     if (!user) return { error: "Unauthorized" };
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
@@ -170,6 +181,11 @@ export const renamePageAction = async (slugId: string, pageId: string, name: str
 
 export const duplicatePageAction = async (slugId: string, pageId: string) => {
   try {
+    const trustedRequest = await assertTrustedServerActionRequest({
+      requireNavigationHeaders: true
+    })
+    if (!trustedRequest.ok) return { error: trustedRequest.message }
+
     const { user, insforge } = await getAuthServer();
     if (!user) return { error: "Unauthorized" };
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
@@ -261,6 +277,11 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
 
 export const reorderPagesAction = async (slugId: string, orderedPageIds: string[]) => {
   try {
+    const trustedRequest = await assertTrustedServerActionRequest({
+      requireNavigationHeaders: true
+    })
+    if (!trustedRequest.ok) return { error: trustedRequest.message }
+
     const { user, insforge } = await getAuthServer();
     if (!user) return { error: "Unauthorized" };
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)

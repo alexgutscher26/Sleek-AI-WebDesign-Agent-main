@@ -120,8 +120,17 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at top, color-mix(in oklch, var(--primary) 12%, transparent) 0%, transparent 34%),
+      radial-gradient(circle at 18% 18%, color-mix(in oklch, var(--chart-4) 18%, transparent) 0%, transparent 24%),
+      radial-gradient(circle at 82% 22%, color-mix(in oklch, var(--chart-2) 12%, transparent) 0%, transparent 28%),
+      linear-gradient(180deg, color-mix(in oklch, var(--background) 92%, black 8%) 0%, var(--background) 42%);
+    background-attachment: fixed;
   }
 }
 
@@ -136,5 +145,35 @@
   50% {
     transform: scale(1.2);
     opacity: 1;
+  }
+}
+
+@keyframes drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0, -12px, 0);
+  }
+}
+
+@layer utilities {
+  .hero-grid {
+    background-image:
+      linear-gradient(to right, color-mix(in oklch, var(--border) 65%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklch, var(--border) 65%, transparent) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: linear-gradient(180deg, white 45%, transparent 100%);
+  }
+
+  .ambient-orb {
+    animation: drift 8s ease-in-out infinite;
+    filter: blur(10px);
+  }
+
+  .glass-panel {
+    background: color-mix(in oklch, var(--background) 78%, transparent);
+    backdrop-filter: blur(20px);
   }
 }
