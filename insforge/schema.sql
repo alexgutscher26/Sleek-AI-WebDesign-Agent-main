@@ -252,17 +252,43 @@ declare
   v_regenerate_cooldown interval := interval '20 seconds';
   v_user_limit integer := 12;
   v_ip_limit integer := 20;
+  v_chat_user_limit integer := 30;
+  v_chat_ip_limit integer := 60;
   v_recent_user_requests integer := 0;
   v_recent_ip_requests integer := 0;
 begin
-  if p_request_kind in ('generate', 'regenerate') then
+  if not exists (
+    select 1
+    from public.projects
+    where id = p_project_id
+      and "userId" = p_user_id
+  ) then
+    raise exception 'PROJECT_OWNERSHIP_CONFLICT'
+      using errcode = 'P0001';
+  end if;
+
+  if p_selected_page_id is not null and not exists (
+    select 1
+    from public.pages
+    where id = p_selected_page_id
+      and "projectId" = p_project_id
+  ) then
+    raise exception 'PAGE_OWNERSHIP_CONFLICT'
+      using errcode = 'P0001';
+  end if;
+
+  if p_request_kind in ('generate', 'regenerate', 'chat') then
     select count(*)
     into v_recent_user_requests
     from public.generation_requests
     where "userId" = p_user_id
+      and "requestKind" = p_request_kind
       and "createdAt" >= now() - v_user_window;
 
-    if v_recent_user_requests >= v_user_limit then
+    if v_recent_user_requests >= case
+      when p_request_kind = 'chat' then v_chat_user_limit
+      else v_user_limit
+    end then
       raise exception 'USER_RATE_LIMIT_EXCEEDED'
         using errcode = 'P0001';
     end if;
@@ -272,9 +298,13 @@ begin
       into v_recent_ip_requests
       from public.generation_requests
       where "ipHash" = p_ip_hash
+        and "requestKind" = p_request_kind
         and "createdAt" >= now() - v_ip_window;
 
-      if v_recent_ip_requests >= v_ip_limit then
+      if v_recent_ip_requests >= case
+        when p_request_kind = 'chat' then v_chat_ip_limit
+        else v_ip_limit
+      end then
         raise exception 'IP_RATE_LIMIT_EXCEEDED'
           using errcode = 'P0001';
       end if;
@@ -350,7 +380,28 @@ begin
 end;
 $$;
 
+create or replace function public.assert_project_owner(
+  p_user_id text,
+  p_project_id uuid
+)
+returns void
+language plpgsql
+as $$
+begin
+  if not exists (
+    select 1
+    from public.projects
+    where id = p_project_id
+      and "userId" = p_user_id
+  ) then
+    raise exception 'PROJECT_OWNERSHIP_CONFLICT'
+      using errcode = 'P0001';
+  end if;
+end;
+$$;
+
 create or replace function public.finish_generation_request(
+  p_user_id text,
   p_request_id uuid,
   p_status text,
   p_response jsonb default null,
@@ -360,6 +411,16 @@ returns void
 language plpgsql
 as $$
 begin
+  if not exists (
+    select 1
+    from public.generation_requests
+    where id = p_request_id
+      and "userId" = p_user_id
+  ) then
+    raise exception 'GENERATION_REQUEST_OWNERSHIP_CONFLICT'
+      using errcode = 'P0001';
+  end if;
+
   update public.generation_requests
   set
     status = p_status,
@@ -371,12 +432,15 @@ end;
 $$;
 
 create or replace function public.touch_project(
+  p_user_id text,
   p_project_id uuid
 )
 returns void
 language plpgsql
 as $$
 begin
+  perform public.assert_project_owner(p_user_id, p_project_id);
+
   update public.projects
   set "updatedAt" = now()
   where id = p_project_id;
@@ -384,6 +448,7 @@ end;
 $$;
 
 create or replace function public.sync_project_metadata(
+  p_user_id text,
   p_project_id uuid,
   p_metadata jsonb
 )
@@ -391,6 +456,8 @@ returns void
 language plpgsql
 as $$
 begin
+  perform public.assert_project_owner(p_user_id, p_project_id);
+
   update public.projects
   set
     metadata = coalesce(p_metadata, '{}'::jsonb),
@@ -400,12 +467,15 @@ end;
 $$;
 
 create or replace function public.rebalance_page_positions(
+  p_user_id text,
   p_project_id uuid
 )
 returns void
 language plpgsql
 as $$
 begin
+  perform public.assert_project_owner(p_user_id, p_project_id);
+
   with ranked_pages as (
     select
       id,
@@ -424,6 +494,7 @@ end;
 $$;
 
 create or replace function public.update_page_positions(
+  p_user_id text,
   p_project_id uuid,
   p_page_ids jsonb
 )
@@ -431,6 +502,8 @@ returns void
 language plpgsql
 as $$
 begin
+  perform public.assert_project_owner(p_user_id, p_project_id);
+
   with desired_order as (
     select
       value::uuid as id,
@@ -443,12 +516,13 @@ begin
   where public.pages.id = desired_order.id
     and public.pages."projectId" = p_project_id;
 
-  perform public.rebalance_page_positions(p_project_id);
-  perform public.touch_project(p_project_id);
+  perform public.rebalance_page_positions(p_user_id, p_project_id);
+  perform public.touch_project(p_user_id, p_project_id);
 end;
 $$;
 
 create or replace function public.commit_message_pair(
+  p_user_id text,
   p_project_id uuid,
   p_user_parts jsonb,
   p_assistant_parts jsonb
@@ -457,18 +531,22 @@ returns void
 language plpgsql
 as $$
 begin
+  perform public.assert_project_owner(p_user_id, p_project_id);
+
   insert into public.messages ("projectId", role, parts)
   values
     (p_project_id, 'user', coalesce(p_user_parts, '[]'::jsonb)),
     (p_project_id, 'assistant', coalesce(p_assistant_parts, '[]'::jsonb));
 
-  perform public.touch_project(p_project_id);
+  perform public.touch_project(p_user_id, p_project_id);
 end;
 $$;
 
 drop function if exists public.commit_generation_result(uuid, jsonb, jsonb, jsonb);
+drop function if exists public.commit_generation_result(text, uuid, jsonb, jsonb, jsonb);
 
 create or replace function public.commit_generation_result(
+  p_user_id text,
   p_project_id uuid,
   p_user_parts jsonb,
   p_assistant_parts jsonb,
@@ -486,6 +564,8 @@ returns table (
 language plpgsql
 as $$
 begin
+  perform public.assert_project_owner(p_user_id, p_project_id);
+
   insert into public.messages ("projectId", role, parts)
   values
     (p_project_id, 'user', coalesce(p_user_parts, '[]'::jsonb)),
@@ -538,13 +618,15 @@ begin
     inserted_pages."updatedAt"
   from inserted_pages;
 
-  perform public.touch_project(p_project_id);
+  perform public.touch_project(p_user_id, p_project_id);
 end;
 $$;
 
 drop function if exists public.commit_regeneration_result(uuid, uuid, text, text, jsonb, jsonb);
+drop function if exists public.commit_regeneration_result(text, uuid, uuid, text, text, jsonb, jsonb);
 
 create or replace function public.commit_regeneration_result(
+  p_user_id text,
   p_project_id uuid,
   p_page_id uuid,
   p_html_content text,
@@ -564,6 +646,8 @@ returns table (
 language plpgsql
 as $$
 begin
+  perform public.assert_project_owner(p_user_id, p_project_id);
+
   insert into public.messages ("projectId", role, parts)
   values
     (p_project_id, 'user', coalesce(p_user_parts, '[]'::jsonb)),
@@ -585,6 +669,6 @@ begin
     public.pages."createdAt",
     public.pages."updatedAt";
 
-  perform public.touch_project(p_project_id);
+  perform public.touch_project(p_user_id, p_project_id);
 end;
 $$;

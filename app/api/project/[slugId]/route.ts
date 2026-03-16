@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { createValidationErrorResponse, parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation";
 import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
+import { assertTrustedAppRequest } from "@/lib/request-security";
 
 type ProjectMessageRecord = {
   id: string
@@ -17,6 +18,11 @@ export async function GET(req: NextRequest,
   { params }: { params: Promise<{ slugId: string }> }
 ) {
   try {
+    const trustedRequest = assertTrustedAppRequest(req)
+    if (!trustedRequest.ok) {
+      return createErrorResponse(403, trustedRequest.code, trustedRequest.message)
+    }
+
     const routeParams = await params;
     const { slugId } = parseSlugRouteParams(routeParams.slugId);
     const { user, insforge } = await getAuthServer()

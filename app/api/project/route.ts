@@ -33,6 +33,7 @@ import { createHash } from "node:crypto";
 import { extractPrimaryHtml, sanitizeGeneratedHtml } from "@/lib/html-guardrails";
 import { getClientIp, hashClientIp, mapGenerationRateLimitError, RateLimitError } from "@/lib/generation-abuse";
 import type { ProjectMetadata } from "@/types/project";
+import { assertTrustedAppRequest } from "@/lib/request-security";
 
 class AbortError extends Error {
   constructor() {
@@ -161,6 +162,7 @@ type GenerationRequestRecord = {
 
 type RouteDeps = {
   insforge: RouteInsforge
+  userId: string
   projectId: string
   latestUserParts: ApiMessagePart[]
 }
@@ -264,8 +266,13 @@ const getModelStrategy = (
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const trustedRequest = assertTrustedAppRequest(request)
+    if (!trustedRequest.ok) {
+      return createErrorResponse(403, trustedRequest.code, trustedRequest.message)
+    }
+
     const { user, insforge } = await getAuthServer();
     if (!user) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized");
 
@@ -555,10 +562,12 @@ const getAiProviderErrorMessage = (error: unknown) => {
 
 const touchProject = async (
   insforge: RouteInsforge,
+  userId: string,
   projectId: string
 ) => {
   try {
     const { error } = await insforge.database.rpc("touch_project", {
+      p_user_id: userId,
       p_project_id: projectId
     })
 
@@ -576,16 +585,19 @@ const touchProject = async (
         updatedAt: new Date().toISOString()
       })
       .eq("id", projectId)
+      .eq("userId", userId)
   }
 }
 
 const syncProjectMetadata = async (
   insforge: RouteInsforge,
+  userId: string,
   projectId: string,
   metadata: ProjectMetadata
 ) => {
   try {
     const { error } = await insforge.database.rpc("sync_project_metadata", {
+      p_user_id: userId,
       p_project_id: projectId,
       p_metadata: metadata
     })
@@ -606,6 +618,7 @@ const syncProjectMetadata = async (
       updatedAt: new Date().toISOString()
     })
     .eq("id", projectId)
+    .eq("userId", userId)
 
   if (error) {
     throw error
@@ -740,6 +753,7 @@ const beginGenerationRequest = async (
 
 const finishGenerationRequest = async (
   insforge: RouteInsforge,
+  userId: string,
   requestId: string | null,
   status: GenerationRequestRecord["status"],
   response: StoredResponse | null,
@@ -751,6 +765,7 @@ const finishGenerationRequest = async (
 
   try {
     await insforge.database.rpc("finish_generation_request", {
+      p_user_id: userId,
       p_request_id: requestId,
       p_status: status,
       p_response: response,
@@ -850,12 +865,14 @@ const replayStoredResponse = async (
 
 const persistMessagePair = async (
   insforge: RouteInsforge,
+  userId: string,
   projectId: string,
   latestUserParts: ApiMessagePart[],
   assistantParts: Array<{ type: string; text?: string; id?: string; data?: unknown }>
 ) => {
   try {
     const { error } = await insforge.database.rpc("commit_message_pair", {
+      p_user_id: userId,
       p_project_id: projectId,
       p_user_parts: latestUserParts,
       p_assistant_parts: assistantParts
@@ -865,7 +882,7 @@ const persistMessagePair = async (
       throw error
     }
 
-    await touchProject(insforge, projectId)
+    await touchProject(insforge, userId, projectId)
     return
   } catch (error) {
     if (!isMissingRpcError(error)) {
@@ -890,7 +907,7 @@ const persistMessagePair = async (
     throw error
   }
 
-  await touchProject(insforge, projectId)
+  await touchProject(insforge, userId, projectId)
 }
 
 const persistGeneratedState = async (
@@ -899,10 +916,11 @@ const persistGeneratedState = async (
   preflightText: string | null,
   summaryText: string
 ) => {
-  const { insforge, projectId, latestUserParts } = deps
+  const { insforge, userId, projectId, latestUserParts } = deps
 
   try {
     const { data, error } = await insforge.database.rpc("commit_generation_result", {
+      p_user_id: userId,
       p_project_id: projectId,
       p_user_parts: latestUserParts,
       p_assistant_parts: [
@@ -935,7 +953,7 @@ const persistGeneratedState = async (
     const savedPages = (Array.isArray(data) ? data : []) as PersistedPage[]
 
     if (savedPages.length > 0) {
-      await touchProject(insforge, projectId)
+      await touchProject(insforge, userId, projectId)
       return savedPages
     }
   } catch (error) {
@@ -969,7 +987,7 @@ const persistGeneratedState = async (
   }
 
   try {
-    await persistMessagePair(insforge, projectId, latestUserParts, [
+    await persistMessagePair(insforge, userId, projectId, latestUserParts, [
       ...(preflightText ? [{ type: "text", text: preflightText }] : []),
       {
         type: "data-generation",
@@ -993,7 +1011,7 @@ const persistGeneratedState = async (
     throw error
   }
 
-  await touchProject(insforge, projectId)
+  await touchProject(insforge, userId, projectId)
 
   return savedPages as PersistedPage[]
 }
@@ -1005,10 +1023,11 @@ const persistRegeneratedState = async (
   preflightText: string | null,
   summaryText: string
 ) => {
-  const { insforge, projectId, latestUserParts } = deps
+  const { insforge, userId, projectId, latestUserParts } = deps
 
   try {
     const { data, error } = await insforge.database.rpc("commit_regeneration_result", {
+      p_user_id: userId,
       p_project_id: projectId,
       p_page_id: selectedPage.id,
       p_html_content: nextPage.htmlContent,
@@ -1039,7 +1058,7 @@ const persistRegeneratedState = async (
     const updatedPage = (Array.isArray(data) ? data[0] : data) as PersistedPage | null
 
     if (updatedPage) {
-      await touchProject(insforge, projectId)
+      await touchProject(insforge, userId, projectId)
       return updatedPage
     }
   } catch (error) {
@@ -1065,7 +1084,7 @@ const persistRegeneratedState = async (
   }
 
   try {
-    await persistMessagePair(insforge, projectId, latestUserParts, [
+    await persistMessagePair(insforge, userId, projectId, latestUserParts, [
       ...(preflightText ? [{ type: "text", text: preflightText }] : []),
       {
         type: "data-generation",
@@ -1089,7 +1108,7 @@ const persistRegeneratedState = async (
     throw error
   }
 
-  await touchProject(insforge, projectId)
+  await touchProject(insforge, userId, projectId)
 
   return updatedPage as PersistedPage
 }
@@ -1140,6 +1159,7 @@ const buildRegenerationSummaryText = (pageName: string) => (
 
 async function runGenerationWorker({
   insforge,
+  userId,
   writer,
   projectId,
   latestUserParts,
@@ -1156,6 +1176,7 @@ async function runGenerationWorker({
   signal,
 }: {
   insforge: RouteInsforge
+  userId: string
   writer: StreamWriter
   projectId: string
   latestUserParts: ApiMessagePart[]
@@ -1308,7 +1329,7 @@ ${page.rootStyles}
   const fullSummaryText = buildGenerationSummaryText(pages)
 
   const savedPages = await persistGeneratedState(
-    { insforge, projectId, latestUserParts },
+    { insforge, userId, projectId, latestUserParts },
     generatedDrafts,
     preflightText,
     fullSummaryText
@@ -1347,6 +1368,7 @@ ${page.rootStyles}
 
 async function runRegenerateWorker({
   insforge,
+  userId,
   writer,
   projectId,
   selectedPage,
@@ -1363,6 +1385,7 @@ async function runRegenerateWorker({
   signal,
 }: {
   insforge: RouteInsforge
+  userId: string
   writer: StreamWriter
   projectId: string
   selectedPage: PersistedPage
@@ -1436,7 +1459,7 @@ async function runRegenerateWorker({
   const fullSummaryText = buildRegenerationSummaryText(selectedPage.name)
 
   const updatedPage = await persistRegeneratedState(
-    { insforge, projectId, latestUserParts },
+    { insforge, userId, projectId, latestUserParts },
     selectedPage,
     {
       htmlContent,
@@ -1479,6 +1502,13 @@ export async function POST(request: NextRequest) {
   let operationSignal: ReturnType<typeof createOperationSignal> | null = null
   let createdProjectId: string | null = null
   try {
+    const trustedRequest = assertTrustedAppRequest(request, {
+      requireNavigationHeaders: true
+    })
+    if (!trustedRequest.ok) {
+      return createErrorResponse(403, trustedRequest.code, trustedRequest.message)
+    }
+
     const body = await parseJsonBody(request)
     const { messages, slugId, selectedPageId, idempotencyKey, contentDepth, creativityLevel, generationMode, layoutComplexity, modelProvider, styleIntensity } = parseProjectPostBody(body)
     const projectMetadata = buildProjectMetadata({
@@ -1608,7 +1638,7 @@ export async function POST(request: NextRequest) {
 
     const projectId = project.id;
 
-    await syncProjectMetadata(insforge, projectId, projectMetadata)
+    await syncProjectMetadata(insforge, user.id, projectId, projectMetadata)
 
     const { data: existingPages } = await insforge.database.from<PersistedPage[]>("pages")
       .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
@@ -1797,7 +1827,7 @@ USER REQUEST: ${latestUserMessage}
               idempotencyKey,
               requestHash,
               intent,
-              null
+              clientIpHash
             )
 
             generationRequestId = chatRequestState.record?.id ?? null
@@ -1842,11 +1872,12 @@ USER REQUEST: ${latestUserMessage}
             throwIfAborted(activeOperationSignal.signal)
             throwIfTimedOut(activeOperationSignal.didTimeOut())
 
-            await persistMessagePair(insforge, projectId, lastMessage.parts, [
+            await persistMessagePair(insforge, user.id, projectId, lastMessage.parts, [
               { type: "text", text: chatText }
             ])
             await finishGenerationRequest(
               insforge,
+              user.id,
               generationRequestId,
               "completed",
               {
@@ -1957,6 +1988,7 @@ USER REQUEST: ${latestUserMessage}
           if (isRegen && selectedPageId) {
             const regenerated = await runRegenerateWorker({
               insforge,
+              userId: user.id,
               writer,
               projectId,
               selectedPage,
@@ -1974,6 +2006,7 @@ USER REQUEST: ${latestUserMessage}
             })
             await finishGenerationRequest(
               insforge,
+              user.id,
               generationRequestId,
               "completed",
               {
@@ -1990,6 +2023,7 @@ USER REQUEST: ${latestUserMessage}
 
           const generated = await runGenerationWorker({
             insforge,
+            userId: user.id,
             writer,
             projectId,
             latestUserParts: lastMessage.parts,
@@ -2007,6 +2041,7 @@ USER REQUEST: ${latestUserMessage}
           });
           await finishGenerationRequest(
             insforge,
+            user.id,
             generationRequestId,
             "completed",
               {
@@ -2026,6 +2061,7 @@ USER REQUEST: ${latestUserMessage}
           if (error instanceof GenerationTimeoutError || activeOperationSignal.didTimeOut()) {
             await finishGenerationRequest(
               insforge,
+              user.id,
               generationRequestId,
               "timed_out",
               null,
@@ -2039,6 +2075,7 @@ USER REQUEST: ${latestUserMessage}
           if (error instanceof AbortError || isAbortLikeError(error)) {
             await finishGenerationRequest(
               insforge,
+              user.id,
               generationRequestId,
               "failed",
               null,
@@ -2059,6 +2096,7 @@ USER REQUEST: ${latestUserMessage}
 
           await finishGenerationRequest(
             insforge,
+            user.id,
             generationRequestId,
             "failed",
             null,

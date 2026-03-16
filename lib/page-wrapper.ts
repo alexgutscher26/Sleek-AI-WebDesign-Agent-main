@@ -1,6 +1,47 @@
 import { BASE_VARIABLES, FONT_VARIABLES } from "./prompt";
 import { sanitizeGeneratedHtml } from "./html-guardrails";
 
+const escapeHtml = (value: string) => (
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+);
+
+const escapeJsString = (value: string) => (
+  value
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .replace(/</g, "\\x3C")
+    .replace(/>/g, "\\x3E")
+);
+
+const sanitizeRootStyles = (value: string) => (
+  value
+    .split(";")
+    .map((declaration) => declaration.trim())
+    .filter(Boolean)
+    .map((declaration) => declaration.match(/^--([a-zA-Z0-9_-]+)\s*:\s*(.+)$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match))
+    .map(([, token, rawValue]) => ({
+      token,
+      value: rawValue.trim()
+    }))
+    .filter(({ value }) => (
+      !/[<>{}`]/.test(value)
+      && !/@import/i.test(value)
+      && !/expression\s*\(/i.test(value)
+      && !/javascript:/i.test(value)
+      && !/url\s*\(\s*['"]?\s*javascript:/i.test(value)
+    ))
+    .map(({ token, value: styleValue }) => `--${token}: ${styleValue}`)
+    .join("; ")
+);
+
 export function getHTMLWrapper(
   htmlContent: string,
   name = "Untitled",
@@ -8,6 +49,9 @@ export function getHTMLWrapper(
   pageId: string
 ) {
   const { html: safeHtml } = sanitizeGeneratedHtml(htmlContent)
+  const safeName = escapeHtml(name)
+  const safePageId = escapeJsString(pageId)
+  const safeRootStyles = sanitizeRootStyles(rootStyles)
 
   const sanitizedHtml = safeHtml
     // Remove h-screen, min-h-screen, h-full from root div specifically
@@ -26,7 +70,7 @@ export function getHTMLWrapper(
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>${name}</title>
+  <title>${safeName}</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -36,7 +80,7 @@ export function getHTMLWrapper(
   <script src="https://code.iconify.design/iconify-icon/3.0.0/iconify-icon.min.js"></script>
 
   <style type="text/tailwindcss">
-    :root {${rootStyles}${FONT_VARIABLES}${BASE_VARIABLES}}
+    :root {${safeRootStyles}${safeRootStyles ? ";" : ""}${FONT_VARIABLES}${BASE_VARIABLES}}
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {width:100%;min-height:100%;}
     body {font-family:var(--font-sans);background:var(--background);color:var(--foreground);-webkit-font-smoothing:antialiased;}
@@ -55,7 +99,7 @@ export function getHTMLWrapper(
 
   <script>
     (()=>{
-      const pageId='${pageId}';
+      const pageId='${safePageId}';
       const send=()=>{
         const r=document.getElementById('root')?.firstElementChild;
         const h=r?.className.match(/h-(screen|full)|min-h-screen/)?Math.max(900,innerHeight):Math.max(r?.scrollHeight||0,document.body.scrollHeight,900);

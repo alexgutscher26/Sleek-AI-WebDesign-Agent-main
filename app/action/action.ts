@@ -116,6 +116,7 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
       .eq("id", pageId)
 
     await insforge.database.rpc("rebalance_page_positions", {
+      p_user_id: user.id,
       p_project_id: project.id
     })
 
@@ -225,6 +226,7 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
     orderedPageIds.splice(insertAt, 0, duplicatedPage.id)
 
     await insforge.database.rpc("update_page_positions", {
+      p_user_id: user.id,
       p_project_id: project.id,
       p_page_ids: orderedPageIds
     })
@@ -262,6 +264,7 @@ export const reorderPagesAction = async (slugId: string, orderedPageIds: string[
       .filter((pageId) => typeof pageId === "string" && pageId.trim().length > 0)
 
     await insforge.database.rpc("update_page_positions", {
+      p_user_id: user.id,
       p_project_id: project.id,
       p_page_ids: normalizedPageIds
     })
