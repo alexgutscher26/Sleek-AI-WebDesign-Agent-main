@@ -19,7 +19,7 @@ type CompletionResponse = {
 
 type ProjectPageRecord = Pick<
   PageType,
-  "id" | "name" | "rootStyles" | "htmlContent" | "projectId" | "createdAt" | "updatedAt"
+  "id" | "name" | "rootStyles" | "htmlContent" | "projectId" | "createdAt" | "updatedAt" | "position"
 >
 
 export const generateProjectTitle = async (message: string, insforgeClient?: CompatClient) => {
@@ -115,6 +115,10 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
       .eq("projectId", project.id)
       .eq("id", pageId)
 
+    await insforge.database.rpc("rebalance_page_positions", {
+      p_project_id: project.id
+    })
+
     return { success: true }
   } catch (error) {
     if (error instanceof RequestValidationError) {
@@ -147,7 +151,7 @@ export const renamePageAction = async (slugId: string, pageId: string, name: str
       .update({ name: trimmedName })
       .eq("projectId", project.id)
       .eq("id", pageId)
-      .select("id, name, rootStyles, htmlContent, createdAt, updatedAt, projectId")
+      .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt, projectId")
       .single()
 
     if (error || !page) {
@@ -178,7 +182,7 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
     if (!project) return { error: "Project not found" }
 
     const { data: sourcePage, error: sourceError } = await insforge.database.from<ProjectPageRecord>("pages")
-      .select("id, name, rootStyles, htmlContent")
+      .select("id, name, rootStyles, htmlContent, position")
       .eq("projectId", project.id)
       .eq("id", pageId)
       .single()
@@ -187,9 +191,10 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
       return { error: "Page not found" }
     }
 
-    const { data: siblingPages } = await insforge.database.from<Array<Pick<PageType, "name">>>("pages")
-      .select("name")
+    const { data: siblingPages } = await insforge.database.from<Array<Pick<PageType, "id" | "name">>>("pages")
+      .select("id, name")
       .eq("projectId", project.id)
+      .order("position", { ascending: true })
 
     const existingNames = new Set((siblingPages ?? []).map((page) => String(page.name)))
     let nextName = `${sourcePage.name} Copy`
@@ -204,16 +209,64 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
         projectId: project.id,
         name: nextName,
         rootStyles: sourcePage.rootStyles,
-        htmlContent: sourcePage.htmlContent
+        htmlContent: sourcePage.htmlContent,
+        position: typeof sourcePage.position === "number" ? sourcePage.position + 1 : 0
       }])
-      .select("id, name, rootStyles, htmlContent, createdAt, updatedAt, projectId")
+      .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt, projectId")
       .single()
 
     if (duplicateError || !duplicatedPage) {
       return { error: "Failed to duplicate page" }
     }
 
-    return { success: true, data: duplicatedPage }
+    const orderedPageIds = (siblingPages ?? []).map((page) => page.id)
+    const sourceIndex = orderedPageIds.indexOf(pageId)
+    const insertAt = sourceIndex === -1 ? orderedPageIds.length : sourceIndex + 1
+    orderedPageIds.splice(insertAt, 0, duplicatedPage.id)
+
+    await insforge.database.rpc("update_page_positions", {
+      p_project_id: project.id,
+      p_page_ids: orderedPageIds
+    })
+
+    return {
+      success: true,
+      data: {
+        ...duplicatedPage,
+        position: insertAt
+      }
+    }
+  } catch (error) {
+    if (error instanceof RequestValidationError) {
+      return { error: "Invalid request" }
+    }
+    return { error: "Internal server error" }
+  }
+}
+
+export const reorderPagesAction = async (slugId: string, orderedPageIds: string[]) => {
+  try {
+    const { user, insforge } = await getAuthServer();
+    if (!user) return { error: "Unauthorized" };
+    const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
+
+    const { data: project } = await getOwnedProjectBySlug<{ id: string }>(
+      insforge,
+      user.id,
+      parsedSlugId,
+      "id"
+    )
+    if (!project) return { error: "Project not found" }
+
+    const normalizedPageIds = orderedPageIds
+      .filter((pageId) => typeof pageId === "string" && pageId.trim().length > 0)
+
+    await insforge.database.rpc("update_page_positions", {
+      p_project_id: project.id,
+      p_page_ids: normalizedPageIds
+    })
+
+    return { success: true }
   } catch (error) {
     if (error instanceof RequestValidationError) {
       return { error: "Invalid request" }

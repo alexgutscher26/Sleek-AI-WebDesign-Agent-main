@@ -97,9 +97,9 @@
 - [ ] Add automatic language/localization options for generated content
 
 ## P1 - Data model and platform APIs
-- [ ] Add `updatedAt` support for projects/messages tables
-- [ ] Add `position` field for stable page ordering
-- [ ] Add project `metadata` JSON for engine settings
+- [x] Add `updatedAt` support for projects/messages tables
+- [x] Add `position` field for stable page ordering
+- [x] Add project `metadata` JSON for engine settings
 - [ ] Add page `metadata` JSON for viewports and tags
 - [ ] Add generation run table with status, latency, token usage
 - [ ] Add asset table for screenshots/icons/thumbnails

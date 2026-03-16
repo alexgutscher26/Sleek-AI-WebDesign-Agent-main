@@ -32,6 +32,7 @@ import { createChatCompletionWithRetries, isAbortLikeError } from "@/lib/ai-retr
 import { createHash } from "node:crypto";
 import { extractPrimaryHtml, sanitizeGeneratedHtml } from "@/lib/html-guardrails";
 import { getClientIp, hashClientIp, mapGenerationRateLimitError, RateLimitError } from "@/lib/generation-abuse";
+import type { ProjectMetadata } from "@/types/project";
 
 class AbortError extends Error {
   constructor() {
@@ -54,12 +55,18 @@ type PersistedPage = {
   name: string
   rootStyles: string
   htmlContent: string
+  position?: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 type PersistedProject = {
   id: string
   title: string
   slugId?: string
+  metadata?: ProjectMetadata
+  createdAt?: string
+  updatedAt?: string
 }
 
 type ProjectOwnershipRecord = {
@@ -72,6 +79,7 @@ type PersistedMessage = {
   role: string
   parts: ApiMessagePart[]
   createdAt?: string
+  updatedAt?: string
 }
 
 type GeneratedPageDraft = {
@@ -168,6 +176,24 @@ const GENERATION_TIMEOUT_MS = 480_000
 const ANALYSIS_MAX_TOKENS = 12000
 const GENERATION_MAX_TOKENS = 14000
 
+const buildProjectMetadata = (settings: {
+  contentDepth: string
+  creativityLevel: string
+  generationMode: string
+  layoutComplexity: string
+  modelProvider: string
+  styleIntensity: string
+}): ProjectMetadata => ({
+  engineSettings: {
+    contentDepth: settings.contentDepth,
+    creativityLevel: settings.creativityLevel,
+    generationMode: settings.generationMode,
+    layoutComplexity: settings.layoutComplexity,
+    modelProvider: settings.modelProvider,
+    styleIntensity: settings.styleIntensity
+  }
+})
+
 const getModelStrategy = (
   provider: ModelProvider,
   task: ModelTask
@@ -244,9 +270,9 @@ export async function GET() {
     if (!user) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized");
 
     const { data: projects, error } = await insforge.database.from("projects")
-      .select("id, title, slugId, createdAt")
+      .select("id, title, slugId, createdAt, updatedAt, metadata")
       .eq("userId", user.id)
-      .order("createdAt", { ascending: false })
+      .order("updatedAt", { ascending: false })
       .limit(10);
 
     if (error) return createErrorResponse(400, "PROJECT_FETCH_FAILED", "Failed to fetch projects");
@@ -527,6 +553,65 @@ const getAiProviderErrorMessage = (error: unknown) => {
   return null
 }
 
+const touchProject = async (
+  insforge: RouteInsforge,
+  projectId: string
+) => {
+  try {
+    const { error } = await insforge.database.rpc("touch_project", {
+      p_project_id: projectId
+    })
+
+    if (error) {
+      throw error
+    }
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      console.log(error, "Failed to touch project")
+      return
+    }
+
+    await insforge.database.from("projects")
+      .update({
+        updatedAt: new Date().toISOString()
+      })
+      .eq("id", projectId)
+  }
+}
+
+const syncProjectMetadata = async (
+  insforge: RouteInsforge,
+  projectId: string,
+  metadata: ProjectMetadata
+) => {
+  try {
+    const { error } = await insforge.database.rpc("sync_project_metadata", {
+      p_project_id: projectId,
+      p_metadata: metadata
+    })
+
+    if (error) {
+      throw error
+    }
+    return
+  } catch (error) {
+    if (!isMissingRpcError(error)) {
+      throw error
+    }
+  }
+
+  const { error } = await insforge.database.from("projects")
+    .update({
+      metadata,
+      updatedAt: new Date().toISOString()
+    })
+    .eq("id", projectId)
+
+  if (error) {
+    throw error
+  }
+}
+
 const getOrCreateProjectAtomic = async (
   insforge: RouteInsforge,
   userId: string,
@@ -780,6 +865,7 @@ const persistMessagePair = async (
       throw error
     }
 
+    await touchProject(insforge, projectId)
     return
   } catch (error) {
     if (!isMissingRpcError(error)) {
@@ -803,6 +889,8 @@ const persistMessagePair = async (
   if (error) {
     throw error
   }
+
+  await touchProject(insforge, projectId)
 }
 
 const persistGeneratedState = async (
@@ -847,6 +935,7 @@ const persistGeneratedState = async (
     const savedPages = (Array.isArray(data) ? data : []) as PersistedPage[]
 
     if (savedPages.length > 0) {
+      await touchProject(insforge, projectId)
       return savedPages
     }
   } catch (error) {
@@ -855,14 +944,25 @@ const persistGeneratedState = async (
     }
   }
 
+  const { data: existingProjectPages } = await insforge.database.from<Array<Pick<PersistedPage, "position">>>("pages")
+    .select("position")
+    .eq("projectId", projectId)
+    .order("position", { ascending: false })
+    .limit(1)
+
+  const basePosition = typeof existingProjectPages?.[0]?.position === "number"
+    ? existingProjectPages[0].position + 1
+    : 0
+
   const { data: savedPages, error: pagesError } = await insforge.database.from<PersistedPage[]>("pages").insert(
-    generatedPages.map((page) => ({
+    generatedPages.map((page, index) => ({
       projectId,
       name: page.name,
       rootStyles: page.rootStyles,
-      htmlContent: page.htmlContent
+      htmlContent: page.htmlContent,
+      position: basePosition + index
     }))
-  ).select("id, name, rootStyles, htmlContent")
+  ).select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
 
   if (pagesError || !savedPages) {
     throw pagesError ?? new Error("Failed to save generated pages")
@@ -892,6 +992,8 @@ const persistGeneratedState = async (
     }
     throw error
   }
+
+  await touchProject(insforge, projectId)
 
   return savedPages as PersistedPage[]
 }
@@ -937,6 +1039,7 @@ const persistRegeneratedState = async (
     const updatedPage = (Array.isArray(data) ? data[0] : data) as PersistedPage | null
 
     if (updatedPage) {
+      await touchProject(insforge, projectId)
       return updatedPage
     }
   } catch (error) {
@@ -954,7 +1057,7 @@ const persistRegeneratedState = async (
     .update(nextPage)
     .eq("id", selectedPage.id)
     .eq("projectId", projectId)
-    .select("id, name, rootStyles, htmlContent")
+    .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
     .single()
 
   if (updateError || !updatedPage) {
@@ -985,6 +1088,8 @@ const persistRegeneratedState = async (
       .eq("projectId", projectId)
     throw error
   }
+
+  await touchProject(insforge, projectId)
 
   return updatedPage as PersistedPage
 }
@@ -1376,6 +1481,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await parseJsonBody(request)
     const { messages, slugId, selectedPageId, idempotencyKey, contentDepth, creativityLevel, generationMode, layoutComplexity, modelProvider, styleIntensity } = parseProjectPostBody(body)
+    const projectMetadata = buildProjectMetadata({
+      contentDepth,
+      creativityLevel,
+      generationMode,
+      layoutComplexity,
+      modelProvider,
+      styleIntensity
+    })
 
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
@@ -1431,10 +1544,11 @@ export async function POST(request: NextRequest) {
           {
             slugId,
             title: provisionalTitle,
-            userId: user.id
+            userId: user.id,
+            metadata: projectMetadata
           }
         ])
-        .select("id, title")
+        .select("id, title, metadata, updatedAt")
         .single()
 
       if (error) {
@@ -1444,7 +1558,7 @@ export async function POST(request: NextRequest) {
             insforge,
             user.id,
             slugId,
-            "id, title"
+            "id, title, metadata, updatedAt"
           )
 
           if (!racedProject) {
@@ -1468,11 +1582,12 @@ export async function POST(request: NextRequest) {
           const { data: updatedProject } = await insforge.database
             .from<PersistedProject>("projects")
             .update({
-              title: generatedTitle
+              title: generatedTitle,
+              metadata: projectMetadata
             })
             .eq("id", createdProjectId)
             .eq("userId", user.id)
-            .select("id, title")
+            .select("id, title, metadata, updatedAt")
             .single()
 
           if (updatedProject) {
@@ -1493,10 +1608,12 @@ export async function POST(request: NextRequest) {
 
     const projectId = project.id;
 
+    await syncProjectMetadata(insforge, projectId, projectMetadata)
+
     const { data: existingPages } = await insforge.database.from<PersistedPage[]>("pages")
-      .select("id, name, rootStyles, htmlContent")
+      .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
       .eq("projectId", projectId)
-      .order("createdAt", { ascending: true })
+      .order("position", { ascending: true })
       .limit(2)
 
     const existingPagesList = existingPages ?? []
@@ -1516,7 +1633,7 @@ export async function POST(request: NextRequest) {
       }))
 
     const { data: selectedPage } = selectedPageId ? await insforge.database.from<PersistedPage>("pages")
-      .select("id, name, rootStyles, htmlContent")
+      .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
       .eq("id", selectedPageId)
       .eq("projectId", projectId)
       .single()

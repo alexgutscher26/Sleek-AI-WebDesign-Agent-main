@@ -9,6 +9,7 @@ type ProjectMessageRecord = {
   role: string
   parts: unknown
   createdAt?: string
+  updatedAt?: string
 }
 
 
@@ -21,11 +22,11 @@ export async function GET(req: NextRequest,
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
 
-    const { data: project, error } = await getOwnedProjectBySlug<{ id: string; title: string }>(
+    const { data: project, error } = await getOwnedProjectBySlug<{ id: string; title: string; metadata?: unknown; updatedAt?: string }>(
       insforge,
       user.id,
       slugId,
-      "id, title"
+      "id, title, metadata, updatedAt"
     )
 
     if (!project) return createErrorResponse(404, "PROJECT_NOT_FOUND", "Project not found")
@@ -40,17 +41,20 @@ export async function GET(req: NextRequest,
     const { data: pages } = await insforge.database.from("pages")
       .select("*")
       .eq("projectId", project.id)
-      .order("createdAt", { ascending: true })
+      .order("position", { ascending: true })
 
     const mappedMessages = (messages || []).map((message) => ({
       id: message.id,
       role: message.role,
       parts: message.parts,
-      createdAt: message.createdAt
+      createdAt: message.createdAt,
+      updatedAt: message.updatedAt
     }))
 
     return createSuccessResponse({
       title: project.title,
+      metadata: project.metadata ?? {},
+      updatedAt: project.updatedAt,
       messages: mappedMessages,
       pages: pages
     })

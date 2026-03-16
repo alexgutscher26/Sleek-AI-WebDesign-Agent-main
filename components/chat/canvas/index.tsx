@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import CanvasControls from './canvas-controls';
 import PageFrame from './page-frame';
 import { PageType } from '@/types/project';
-import { deletePageAction, duplicatePageAction, renamePageAction } from '@/app/action/action';
+import { deletePageAction, duplicatePageAction, renamePageAction, reorderPagesAction } from '@/app/action/action';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { EmptyState, LoadingState } from '@/components/ui/view-state';
@@ -53,6 +53,16 @@ const Canvas = ({
   const [zoomPercent, setZoomPercent] = useState<number>(26)
   const [currentScale, setCurrentScale] = useState<number>(0.26)
   const [deletingPageId, setDeletingPageId] = useState<string | null>(null);
+
+  const persistPageOrder = async (orderedPages: PageType[]) => {
+    const result = await reorderPagesAction(slugId, orderedPages.map((page) => page.id))
+    if (result.error) {
+      toast.error(result.error || "Failed to save page order")
+      queryClient.invalidateQueries({
+        queryKey: ["project", slugId]
+      })
+    }
+  }
 
   const handleDelete = async (pageId: string) => {
     setDeletingPageId(pageId);
@@ -222,6 +232,7 @@ const Canvas = ({
                           if (fromIndex <= 0) return prev
                           const [moved] = nextPages.splice(fromIndex, 1)
                           nextPages.splice(fromIndex - 1, 0, moved)
+                          void persistPageOrder(nextPages)
                           return nextPages
                         })
                       }}
@@ -233,6 +244,7 @@ const Canvas = ({
                           if (fromIndex === -1 || fromIndex >= nextPages.length - 1) return prev
                           const [moved] = nextPages.splice(fromIndex, 1)
                           nextPages.splice(fromIndex + 1, 0, moved)
+                          void persistPageOrder(nextPages)
                           return nextPages
                         })
                       }}

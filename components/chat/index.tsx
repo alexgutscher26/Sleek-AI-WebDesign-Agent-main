@@ -76,7 +76,6 @@ export type EditorHistoryControls = {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const PROMPT_HISTORY_MERGE_WINDOW_MS = 900
 const MAX_HISTORY_ENTRIES = 100
-const PAGE_ORDER_STORAGE_PREFIX = "sleek-page-order:"
 
 const getDefaultPageLayout = (index: number): CanvasPageLayout => ({
   x: 100 + index * 1600,
@@ -99,22 +98,6 @@ const snapshotsEqual = (a: EditorSnapshot, b: EditorSnapshot) => (
   a.toolMode === b.toolMode &&
   JSON.stringify(a.pageLayouts) === JSON.stringify(b.pageLayouts)
 )
-
-const reorderPagesByIds = (pages: PageType[], orderedIds: string[]) => {
-  if (orderedIds.length === 0) {
-    return pages
-  }
-
-  const orderMap = new Map(orderedIds.map((id, index) => [id, index]))
-  return [...pages].sort((a, b) => {
-    const aIndex = orderMap.get(a.id)
-    const bIndex = orderMap.get(b.id)
-    if (aIndex === undefined && bIndex === undefined) return 0
-    if (aIndex === undefined) return 1
-    if (bIndex === undefined) return -1
-    return aIndex - bIndex
-  })
-}
 
 const isEditableTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) {
@@ -472,34 +455,6 @@ const ChatInterface = ({
   useEffect(() => {
     setPageLayouts((prev) => normalizePageLayouts(pages, prev))
   }, [pages])
-
-  useEffect(() => {
-    if (!slugId || pages.length === 0) {
-      return
-    }
-
-    const storageKey = `${PAGE_ORDER_STORAGE_PREFIX}${slugId}`
-    const storedOrder = window.localStorage.getItem(storageKey)
-    if (!storedOrder) {
-      return
-    }
-
-    try {
-      const parsedOrder = JSON.parse(storedOrder) as string[]
-      setPages((prev) => reorderPagesByIds(prev, parsedOrder))
-    } catch {
-      window.localStorage.removeItem(storageKey)
-    }
-  }, [slugId])
-
-  useEffect(() => {
-    if (!slugId || pages.length === 0) {
-      return
-    }
-
-    const storageKey = `${PAGE_ORDER_STORAGE_PREFIX}${slugId}`
-    window.localStorage.setItem(storageKey, JSON.stringify(pages.map((page) => page.id)))
-  }, [pages, slugId])
 
   const applySnapshot = (snapshot: EditorSnapshot) => {
     setInput(snapshot.input)

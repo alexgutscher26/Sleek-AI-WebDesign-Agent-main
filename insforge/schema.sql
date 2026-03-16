@@ -9,7 +9,9 @@ create table if not exists public.projects (
   "userId" text not null,
   "slugId" text not null unique,
   title text not null,
-  "createdAt" timestamptz not null default now()
+  metadata jsonb not null default '{}'::jsonb,
+  "createdAt" timestamptz not null default now(),
+  "updatedAt" timestamptz not null default now()
 );
 
 create table if not exists public.pages (
@@ -18,6 +20,7 @@ create table if not exists public.pages (
   name text not null,
   "rootStyles" text not null,
   "htmlContent" text not null,
+  position integer not null default 0,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
 );
@@ -27,7 +30,8 @@ create table if not exists public.messages (
   "projectId" uuid not null references public.projects(id) on delete cascade,
   role text not null check (role in ('user', 'assistant', 'system')),
   parts jsonb not null default '[]'::jsonb,
-  "createdAt" timestamptz not null default now()
+  "createdAt" timestamptz not null default now(),
+  "updatedAt" timestamptz not null default now()
 );
 
 create table if not exists public.generation_requests (
@@ -49,11 +53,77 @@ create table if not exists public.generation_requests (
 alter table public.generation_requests
   add column if not exists "ipHash" text;
 
+alter table public.projects
+  add column if not exists metadata jsonb;
+
+alter table public.projects
+  add column if not exists "updatedAt" timestamptz;
+
+alter table public.pages
+  add column if not exists position integer;
+
+alter table public.messages
+  add column if not exists "updatedAt" timestamptz;
+
+alter table public.projects
+  alter column metadata set default '{}'::jsonb;
+
+update public.projects
+set metadata = '{}'::jsonb
+where metadata is null;
+
+alter table public.projects
+  alter column metadata set not null;
+
+update public.projects
+set "updatedAt" = coalesce("createdAt", now())
+where "updatedAt" is null;
+
+alter table public.projects
+  alter column "updatedAt" set default now();
+
+alter table public.projects
+  alter column "updatedAt" set not null;
+
+with ranked_pages as (
+  select
+    id,
+    row_number() over (
+      partition by "projectId"
+      order by coalesce(position, 2147483647), "createdAt", id
+    ) - 1 as next_position
+  from public.pages
+)
+update public.pages
+set position = ranked_pages.next_position
+from ranked_pages
+where public.pages.id = ranked_pages.id
+  and public.pages.position is distinct from ranked_pages.next_position;
+
+alter table public.pages
+  alter column position set default 0;
+
+alter table public.pages
+  alter column position set not null;
+
+update public.messages
+set "updatedAt" = coalesce("createdAt", now())
+where "updatedAt" is null;
+
+alter table public.messages
+  alter column "updatedAt" set default now();
+
+alter table public.messages
+  alter column "updatedAt" set not null;
+
 create index if not exists projects_userid_createdat_idx
   on public.projects ("userId", "createdAt" desc);
 
 create index if not exists pages_projectid_createdat_idx
   on public.pages ("projectId", "createdAt" asc);
+
+create index if not exists pages_projectid_position_idx
+  on public.pages ("projectId", position asc, "createdAt" asc);
 
 create index if not exists messages_projectid_createdat_idx
   on public.messages ("projectId", "createdAt" asc);
@@ -85,6 +155,18 @@ $$;
 drop trigger if exists trg_pages_set_updated_at on public.pages;
 create trigger trg_pages_set_updated_at
 before update on public.pages
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists trg_projects_set_updated_at on public.projects;
+create trigger trg_projects_set_updated_at
+before update on public.projects
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists trg_messages_set_updated_at on public.messages;
+create trigger trg_messages_set_updated_at
+before update on public.messages
 for each row
 execute function public.set_updated_at();
 
@@ -288,6 +370,84 @@ begin
 end;
 $$;
 
+create or replace function public.touch_project(
+  p_project_id uuid
+)
+returns void
+language plpgsql
+as $$
+begin
+  update public.projects
+  set "updatedAt" = now()
+  where id = p_project_id;
+end;
+$$;
+
+create or replace function public.sync_project_metadata(
+  p_project_id uuid,
+  p_metadata jsonb
+)
+returns void
+language plpgsql
+as $$
+begin
+  update public.projects
+  set
+    metadata = coalesce(p_metadata, '{}'::jsonb),
+    "updatedAt" = now()
+  where id = p_project_id;
+end;
+$$;
+
+create or replace function public.rebalance_page_positions(
+  p_project_id uuid
+)
+returns void
+language plpgsql
+as $$
+begin
+  with ranked_pages as (
+    select
+      id,
+      row_number() over (
+        order by position asc, "createdAt" asc, id asc
+      ) - 1 as next_position
+    from public.pages
+    where "projectId" = p_project_id
+  )
+  update public.pages
+  set position = ranked_pages.next_position
+  from ranked_pages
+  where public.pages.id = ranked_pages.id
+    and public.pages.position is distinct from ranked_pages.next_position;
+end;
+$$;
+
+create or replace function public.update_page_positions(
+  p_project_id uuid,
+  p_page_ids jsonb
+)
+returns void
+language plpgsql
+as $$
+begin
+  with desired_order as (
+    select
+      value::uuid as id,
+      ordinality - 1 as next_position
+    from jsonb_array_elements_text(coalesce(p_page_ids, '[]'::jsonb)) with ordinality
+  )
+  update public.pages
+  set position = desired_order.next_position
+  from desired_order
+  where public.pages.id = desired_order.id
+    and public.pages."projectId" = p_project_id;
+
+  perform public.rebalance_page_positions(p_project_id);
+  perform public.touch_project(p_project_id);
+end;
+$$;
+
 create or replace function public.commit_message_pair(
   p_project_id uuid,
   p_user_parts jsonb,
@@ -301,8 +461,12 @@ begin
   values
     (p_project_id, 'user', coalesce(p_user_parts, '[]'::jsonb)),
     (p_project_id, 'assistant', coalesce(p_assistant_parts, '[]'::jsonb));
+
+  perform public.touch_project(p_project_id);
 end;
 $$;
+
+drop function if exists public.commit_generation_result(uuid, jsonb, jsonb, jsonb);
 
 create or replace function public.commit_generation_result(
   p_project_id uuid,
@@ -314,7 +478,10 @@ returns table (
   id uuid,
   name text,
   "rootStyles" text,
-  "htmlContent" text
+  "htmlContent" text,
+  position integer,
+  "createdAt" timestamptz,
+  "updatedAt" timestamptz
 )
 language plpgsql
 as $$
@@ -325,24 +492,57 @@ begin
     (p_project_id, 'assistant', coalesce(p_assistant_parts, '[]'::jsonb));
 
   return query
-  with inserted_pages as (
-    insert into public.pages ("projectId", name, "rootStyles", "htmlContent")
+  with page_payload as (
     select
-      p_project_id,
       payload.name,
       payload."rootStyles",
-      payload."htmlContent"
+      payload."htmlContent",
+      row_number() over () - 1 as offset
     from jsonb_to_recordset(coalesce(p_pages, '[]'::jsonb)) as payload(
       name text,
       "rootStyles" text,
       "htmlContent" text
     )
-    returning public.pages.id, public.pages.name, public.pages."rootStyles", public.pages."htmlContent"
+  ),
+  existing_pages as (
+    select coalesce(max(position), -1) as max_position
+    from public.pages
+    where "projectId" = p_project_id
+  ),
+  inserted_pages as (
+    insert into public.pages ("projectId", name, "rootStyles", "htmlContent", position)
+    select
+      p_project_id,
+      page_payload.name,
+      page_payload."rootStyles",
+      page_payload."htmlContent",
+      existing_pages.max_position + page_payload.offset + 1
+    from page_payload
+    cross join existing_pages
+    returning
+      public.pages.id,
+      public.pages.name,
+      public.pages."rootStyles",
+      public.pages."htmlContent",
+      public.pages.position,
+      public.pages."createdAt",
+      public.pages."updatedAt"
   )
-  select inserted_pages.id, inserted_pages.name, inserted_pages."rootStyles", inserted_pages."htmlContent"
+  select
+    inserted_pages.id,
+    inserted_pages.name,
+    inserted_pages."rootStyles",
+    inserted_pages."htmlContent",
+    inserted_pages.position,
+    inserted_pages."createdAt",
+    inserted_pages."updatedAt"
   from inserted_pages;
+
+  perform public.touch_project(p_project_id);
 end;
 $$;
+
+drop function if exists public.commit_regeneration_result(uuid, uuid, text, text, jsonb, jsonb);
 
 create or replace function public.commit_regeneration_result(
   p_project_id uuid,
@@ -356,7 +556,10 @@ returns table (
   id uuid,
   name text,
   "rootStyles" text,
-  "htmlContent" text
+  "htmlContent" text,
+  position integer,
+  "createdAt" timestamptz,
+  "updatedAt" timestamptz
 )
 language plpgsql
 as $$
@@ -373,6 +576,15 @@ begin
     "rootStyles" = p_root_styles
   where public.pages.id = p_page_id
     and public.pages."projectId" = p_project_id
-  returning public.pages.id, public.pages.name, public.pages."rootStyles", public.pages."htmlContent";
+  returning
+    public.pages.id,
+    public.pages.name,
+    public.pages."rootStyles",
+    public.pages."htmlContent",
+    public.pages.position,
+    public.pages."createdAt",
+    public.pages."updatedAt";
+
+  perform public.touch_project(p_project_id);
 end;
 $$;

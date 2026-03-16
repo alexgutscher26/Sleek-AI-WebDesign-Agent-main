@@ -15,7 +15,11 @@ type Filter =
 
 const VOID_RPCS = new Set([
   "finish_generation_request",
-  "commit_message_pair"
+  "commit_message_pair",
+  "touch_project",
+  "sync_project_metadata",
+  "rebalance_page_positions",
+  "update_page_positions"
 ])
 
 const RPC_PARAM_ORDER: Record<string, string[]> = {
@@ -31,6 +35,10 @@ const RPC_PARAM_ORDER: Record<string, string[]> = {
   ],
   finish_generation_request: ["p_request_id", "p_status", "p_response", "p_error"],
   commit_message_pair: ["p_project_id", "p_user_parts", "p_assistant_parts"],
+  touch_project: ["p_project_id"],
+  sync_project_metadata: ["p_project_id", "p_metadata"],
+  rebalance_page_positions: ["p_project_id"],
+  update_page_positions: ["p_project_id", "p_page_ids"],
   commit_generation_result: ["p_project_id", "p_user_parts", "p_assistant_parts", "p_pages"],
   commit_regeneration_result: [
     "p_project_id",
