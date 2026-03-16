@@ -100,8 +100,8 @@
 - [x] Add `updatedAt` support for projects/messages tables
 - [x] Add `position` field for stable page ordering
 - [x] Add project `metadata` JSON for engine settings
-- [ ] Add page `metadata` JSON for viewports and tags
-- [ ] Add generation run table with status, latency, token usage
+- [x] Add page `metadata` JSON for viewports and tags
+- [x] Add generation run table with status, latency, token usage
 - [ ] Add asset table for screenshots/icons/thumbnails
 - [ ] Add job table for async render/export pipelines
 - [ ] Add prompt template table with tags and versions

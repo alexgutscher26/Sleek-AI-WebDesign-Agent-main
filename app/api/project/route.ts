@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { convertModelMessages, generateProjectTitle } from "@/app/action/action";
+import { generateProjectTitle } from "@/app/action/action";
 import { getAuthServer } from "@/lib/insforge-server";
 import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMessage, UIMessageStreamWriter } from "ai";
 import {
@@ -32,7 +32,7 @@ import { createChatCompletionWithRetries, isAbortLikeError } from "@/lib/ai-retr
 import { createHash } from "node:crypto";
 import { extractPrimaryHtml, sanitizeGeneratedHtml } from "@/lib/html-guardrails";
 import { getClientIp, hashClientIp, mapGenerationRateLimitError, RateLimitError } from "@/lib/generation-abuse";
-import type { ProjectMetadata } from "@/types/project";
+import type { PageMetadata, ProjectMetadata } from "@/types/project";
 import { assertTrustedAppRequest } from "@/lib/request-security";
 
 class AbortError extends Error {
@@ -56,6 +56,7 @@ type PersistedPage = {
   name: string
   rootStyles: string
   htmlContent: string
+  metadata?: PageMetadata
   position?: number
   createdAt?: string
   updatedAt?: string
@@ -88,6 +89,7 @@ type GeneratedPageDraft = {
   name: string
   rootStyles: string
   htmlContent: string
+  metadata: PageMetadata
 }
 
 type AnalysisPage = {
@@ -96,6 +98,7 @@ type AnalysisPage = {
   purpose: string
   visualDescription: string
   rootStyles: string
+  metadata?: PageMetadata
 }
 
 type AnalysisResult = {
@@ -169,6 +172,27 @@ type RouteDeps = {
 
 type ModelTask = "intent" | "chat" | "analysis" | "generate" | "regenerate"
 
+type GenerationRunTask = "intent" | "preflight" | "chat" | "analysis" | "generate" | "regenerate"
+
+type CompletionUsage = {
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+}
+
+type GenerationRunContext = {
+  insforge: RouteInsforge
+  userId: string
+  projectId: string
+  generationRequestId?: string | null
+  selectedPageId?: string | null
+  requestKind: RequestKind
+  task: GenerationRunTask
+  modelProvider: ModelProvider
+  metadata?: Record<string, unknown>
+  didTimeOut?: () => boolean
+}
+
 type ModelStrategy = {
   model: string
   fallbackModels: string[]
@@ -195,6 +219,68 @@ const buildProjectMetadata = (settings: {
     styleIntensity: settings.styleIntensity
   }
 })
+
+const DEFAULT_PAGE_VIEWPORTS: NonNullable<PageMetadata["viewports"]> = [
+  { id: "mobile", label: "Mobile", width: 390, height: 844 },
+  { id: "tablet", label: "Tablet", width: 834, height: 1112 },
+  { id: "desktop", label: "Desktop", width: 1440, height: 1024 }
+]
+
+const normalizeTag = (value: string) => (
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+)
+
+const buildPageMetadata = (
+  page: Pick<AnalysisPage, "name" | "purpose" | "visualDescription">,
+  options: {
+    generationMode: string
+    selectedPageName?: string
+  }
+): PageMetadata => {
+  const tags = Array.from(new Set([
+    options.generationMode,
+    page.name,
+    page.purpose,
+    options.selectedPageName ?? "",
+    ...page.visualDescription.split(/[\s,./|]+/)
+  ]
+    .map(normalizeTag)
+    .filter((tag) => tag.length >= 3)
+    .slice(0, 12)))
+
+  return {
+    tags,
+    viewports: DEFAULT_PAGE_VIEWPORTS
+  }
+}
+
+const extractCompletionUsage = (response: unknown): CompletionUsage => {
+  if (!response || typeof response !== "object" || !("usage" in response)) {
+    return {
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null
+    }
+  }
+
+  const usage = (response as {
+    usage?: {
+      prompt_tokens?: number
+      completion_tokens?: number
+      total_tokens?: number
+    }
+  }).usage
+
+  return {
+    promptTokens: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : null,
+    completionTokens: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : null,
+    totalTokens: typeof usage?.total_tokens === "number" ? usage.total_tokens : null
+  }
+}
 
 const getModelStrategy = (
   provider: ModelProvider,
@@ -386,6 +472,38 @@ const prepareGeneratedHtml = (rawHtml: string) => {
   return sanitized.html
 }
 
+const convertApiMessagesToModelMessages = (messages: Array<Pick<PersistedMessage, "role" | "parts">>) => (
+  messages.map((message) => {
+    const contentParts: Array<
+      | { type: "text"; text: string }
+      | { type: "image"; image: string }
+    > = []
+
+    for (const part of message.parts) {
+      if (part.type === "text" && typeof part.text === "string" && part.text.trim()) {
+        contentParts.push({
+          type: "text",
+          text: part.text
+        })
+      } else if (part.type === "file" && part.mediaType?.startsWith("image/") && part.url) {
+        contentParts.push({
+          type: "image",
+          image: part.url
+        })
+      }
+    }
+
+    const content = contentParts.length === 1 && contentParts[0]?.type === "text"
+      ? contentParts[0].text
+      : contentParts
+
+    return {
+      role: message.role,
+      content
+    }
+  })
+)
+
 const parsePreflightResult = (
   preflightText: string,
   options: {
@@ -527,6 +645,32 @@ const isLegacyGenerationRequestSchemaError = (error: unknown) => {
   )
 }
 
+const isMissingGenerationRunsSchemaError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return (
+    message.includes(`relation "generation_runs" does not exist`) ||
+    message.includes(`column "latencyms" does not exist`) ||
+    message.includes(`column "prompttokens" does not exist`) ||
+    message.includes(`column "completiontokens" does not exist`) ||
+    message.includes(`column "totaltokens" does not exist`) ||
+    message.includes(`column "generationrequestid" does not exist`) ||
+    message.includes(`column "selectedpageid" does not exist`)
+  )
+}
+
+const isMissingPageMetadataSchemaError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return message.includes(`column "metadata" of relation "pages" does not exist`)
+}
+
 const getBackendUnavailableMessage = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
   return message.includes("No backend services available for app:")
@@ -622,6 +766,76 @@ const syncProjectMetadata = async (
 
   if (error) {
     throw error
+  }
+}
+
+const recordGenerationRun = async (
+  context: GenerationRunContext,
+  payload: {
+    model: string
+    attempt: number
+    status: "completed" | "failed" | "timed_out" | "canceled"
+    latencyMs: number
+    usage?: CompletionUsage
+    error?: string | null
+  }
+) => {
+  const { error } = await context.insforge.database.from("generation_runs").insert([{
+    userId: context.userId,
+    projectId: context.projectId,
+    generationRequestId: context.generationRequestId ?? null,
+    selectedPageId: context.selectedPageId ?? null,
+    requestKind: context.requestKind,
+    task: context.task,
+    status: payload.status,
+    model: payload.model,
+    provider: context.modelProvider,
+    attempt: payload.attempt,
+    latencyMs: payload.latencyMs,
+    promptTokens: payload.usage?.promptTokens ?? null,
+    completionTokens: payload.usage?.completionTokens ?? null,
+    totalTokens: payload.usage?.totalTokens ?? null,
+    metadata: context.metadata ?? {},
+    error: payload.error ?? null
+  }])
+
+  if (error && !isMissingGenerationRunsSchemaError(new Error(error.message ?? "Database error"))) {
+    console.log(error, "Failed to record generation run")
+  }
+}
+
+const createTrackedCompletionFactory = (
+  baseCreateCompletion: ReturnType<typeof createInsforgeCompletion>,
+  context: GenerationRunContext
+) => {
+  let attempt = 0
+
+  return async <T,>(options: Record<string, unknown>) => {
+    attempt += 1
+    const startedAt = Date.now()
+    const model = typeof options.model === "string" ? options.model : "unknown"
+
+    try {
+      const response = await baseCreateCompletion<T>(options)
+      await recordGenerationRun(context, {
+        model,
+        attempt,
+        status: "completed",
+        latencyMs: Date.now() - startedAt,
+        usage: extractCompletionUsage(response)
+      })
+      return response
+    } catch (error) {
+      const timedOut = context.didTimeOut?.() ?? false
+      await recordGenerationRun(context, {
+        model,
+        attempt,
+        status: timedOut ? "timed_out" : isAbortLikeError(error) ? "canceled" : "failed",
+        latencyMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
   }
 }
 
@@ -910,6 +1124,38 @@ const persistMessagePair = async (
   await touchProject(insforge, userId, projectId)
 }
 
+const insertGeneratedPages = async (
+  insforge: RouteInsforge,
+  projectId: string,
+  generatedPages: GeneratedPageDraft[],
+  basePosition: number
+) => {
+  const rows = generatedPages.map((page, index) => ({
+    projectId,
+    name: page.name,
+    rootStyles: page.rootStyles,
+    htmlContent: page.htmlContent,
+    metadata: page.metadata,
+    position: basePosition + index
+  }))
+
+  const response = await insforge.database.from<PersistedPage[]>("pages")
+    .insert(rows)
+    .select("id, name, rootStyles, htmlContent, metadata, position, createdAt, updatedAt")
+
+  if (!response.error) {
+    return response
+  }
+
+  if (!isMissingPageMetadataSchemaError(new Error(response.error.message ?? "Database error"))) {
+    return response
+  }
+
+  return await insforge.database.from<PersistedPage[]>("pages")
+    .insert(rows.map(({ metadata: _metadata, ...page }) => page))
+    .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
+}
+
 const persistGeneratedState = async (
   deps: RouteDeps,
   generatedPages: GeneratedPageDraft[],
@@ -942,7 +1188,8 @@ const persistGeneratedState = async (
       p_pages: generatedPages.map((page) => ({
         name: page.name,
         rootStyles: page.rootStyles,
-        htmlContent: page.htmlContent
+        htmlContent: page.htmlContent,
+        metadata: page.metadata
       }))
     })
 
@@ -950,7 +1197,10 @@ const persistGeneratedState = async (
       throw error
     }
 
-    const savedPages = (Array.isArray(data) ? data : []) as PersistedPage[]
+    const savedPages = ((Array.isArray(data) ? data : []) as PersistedPage[]).map((page, index) => ({
+      ...page,
+      metadata: page.metadata ?? generatedPages[index]?.metadata
+    }))
 
     if (savedPages.length > 0) {
       await touchProject(insforge, userId, projectId)
@@ -972,15 +1222,12 @@ const persistGeneratedState = async (
     ? existingProjectPages[0].position + 1
     : 0
 
-  const { data: savedPages, error: pagesError } = await insforge.database.from<PersistedPage[]>("pages").insert(
-    generatedPages.map((page, index) => ({
-      projectId,
-      name: page.name,
-      rootStyles: page.rootStyles,
-      htmlContent: page.htmlContent,
-      position: basePosition + index
-    }))
-  ).select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
+  const { data: savedPages, error: pagesError } = await insertGeneratedPages(
+    insforge,
+    projectId,
+    generatedPages,
+    basePosition
+  )
 
   if (pagesError || !savedPages) {
     throw pagesError ?? new Error("Failed to save generated pages")
@@ -1013,7 +1260,10 @@ const persistGeneratedState = async (
 
   await touchProject(insforge, userId, projectId)
 
-  return savedPages as PersistedPage[]
+  return (savedPages as PersistedPage[]).map((page, index) => ({
+    ...page,
+    metadata: page.metadata ?? generatedPages[index]?.metadata
+  }))
 }
 
 const persistRegeneratedState = async (
@@ -1059,7 +1309,10 @@ const persistRegeneratedState = async (
 
     if (updatedPage) {
       await touchProject(insforge, userId, projectId)
-      return updatedPage
+      return {
+        ...updatedPage,
+        metadata: updatedPage.metadata ?? selectedPage.metadata
+      }
     }
   } catch (error) {
     if (!isMissingRpcError(error)) {
@@ -1076,7 +1329,7 @@ const persistRegeneratedState = async (
     .update(nextPage)
     .eq("id", selectedPage.id)
     .eq("projectId", projectId)
-    .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
+    .select("id, name, rootStyles, htmlContent, metadata, position, createdAt, updatedAt")
     .single()
 
   if (updateError || !updatedPage) {
@@ -1110,7 +1363,10 @@ const persistRegeneratedState = async (
 
   await touchProject(insforge, userId, projectId)
 
-  return updatedPage as PersistedPage
+  return {
+    ...(updatedPage as PersistedPage),
+    metadata: (updatedPage as PersistedPage).metadata ?? selectedPage.metadata
+  }
 }
 
 const streamTextResponse = async (
@@ -1162,6 +1418,7 @@ async function runGenerationWorker({
   userId,
   writer,
   projectId,
+  generationRequestId,
   latestUserParts,
   latestUserMessage,
   analysis,
@@ -1179,6 +1436,7 @@ async function runGenerationWorker({
   userId: string
   writer: StreamWriter
   projectId: string
+  generationRequestId?: string | null
   latestUserParts: ApiMessagePart[]
   latestUserMessage: string
   analysis: AnalysisResult
@@ -1193,7 +1451,21 @@ async function runGenerationWorker({
   signal: AbortSignal
 }): Promise<{ savedPages: PersistedPage[]; summaryText: string }> {
   const { pages } = analysis;
-  const createCompletion = createInsforgeCompletion(insforge)
+  const createCompletion = createTrackedCompletionFactory(
+    createInsforgeCompletion(insforge),
+    {
+      insforge,
+      userId,
+      projectId,
+      generationRequestId,
+      requestKind: "generate",
+      task: "generate",
+      modelProvider,
+      metadata: {
+        pageCount: pages.length
+      }
+    }
+  )
   const modelStrategy = getModelStrategy(modelProvider, "generate")
 
   if (!analysis || !pages || pages.length === 0) {
@@ -1215,6 +1487,7 @@ async function runGenerationWorker({
       name: page.name,
       rootStyles: page.rootStyles,
       htmlContent: "",
+      metadata: buildPageMetadata(page, { generationMode }),
       isLoading: true
     }))
   }, { transient: true });
@@ -1304,7 +1577,8 @@ ${page.rootStyles}
       tempId: page.id,
       name: page.name,
       rootStyles: page.rootStyles,
-      htmlContent
+      htmlContent,
+      metadata: buildPageMetadata(page, { generationMode })
     }
 
     generatedDrafts.push(draft)
@@ -1321,6 +1595,7 @@ ${page.rootStyles}
         name: page.name,
         rootStyles: page.rootStyles,
         htmlContent,
+        metadata: draft.metadata,
         isLoading: false
       }
     }, { transient: true });
@@ -1355,6 +1630,7 @@ ${page.rootStyles}
         name: savedPage.name,
         rootStyles: savedPage.rootStyles,
         htmlContent: savedPage.htmlContent,
+        metadata: savedPage.metadata,
         isLoading: false
       }
     }, { transient: true });
@@ -1371,6 +1647,7 @@ async function runRegenerateWorker({
   userId,
   writer,
   projectId,
+  generationRequestId,
   selectedPage,
   latestUserParts,
   latestUserMessage,
@@ -1388,6 +1665,7 @@ async function runRegenerateWorker({
   userId: string
   writer: StreamWriter
   projectId: string
+  generationRequestId?: string | null
   selectedPage: PersistedPage
   latestUserParts: ApiMessagePart[]
   latestUserMessage: string
@@ -1401,7 +1679,22 @@ async function runRegenerateWorker({
   styleIntensity: string
   signal: AbortSignal
 }): Promise<{ page: PersistedPage; summaryText: string }> {
-  const createCompletion = createInsforgeCompletion(insforge)
+  const createCompletion = createTrackedCompletionFactory(
+    createInsforgeCompletion(insforge),
+    {
+      insforge,
+      userId,
+      projectId,
+      generationRequestId,
+      selectedPageId: selectedPage.id,
+      requestKind: "regenerate",
+      task: "regenerate",
+      modelProvider,
+      metadata: {
+        pageName: selectedPage.name
+      }
+    }
+  )
   const modelStrategy = getModelStrategy(modelProvider, "regenerate")
 
   if (!analysis || analysis.pages?.length === 0) {
@@ -1478,6 +1771,7 @@ async function runRegenerateWorker({
       name: updatedPage.name,
       rootStyles: updatedPage.rootStyles,
       htmlContent: updatedPage.htmlContent,
+      metadata: updatedPage.metadata,
       isLoading: false,
     }
   }, { transient: true })
@@ -1641,7 +1935,7 @@ export async function POST(request: NextRequest) {
     await syncProjectMetadata(insforge, user.id, projectId, projectMetadata)
 
     const { data: existingPages } = await insforge.database.from<PersistedPage[]>("pages")
-      .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
+      .select("id, name, rootStyles, htmlContent, metadata, position, createdAt, updatedAt")
       .eq("projectId", projectId)
       .order("position", { ascending: true })
       .limit(2)
@@ -1649,7 +1943,21 @@ export async function POST(request: NextRequest) {
     const existingPagesList = existingPages ?? []
     const hasExistingPages = existingPagesList.length > 0
 
-    const modelMessages = await convertModelMessages(messages.slice(10) as UIMessage[])
+    const { data: persistedMessages } = await insforge.database.from<PersistedMessage[]>("messages")
+      .select("id, role, parts, createdAt, updatedAt")
+      .eq("projectId", projectId)
+      .order("createdAt", { ascending: true })
+
+    const trustedConversation = [
+      ...((persistedMessages ?? []).filter((message) => message.role === "user" || message.role === "assistant")),
+      {
+        id: "latest-user-message",
+        role: "user",
+        parts: lastMessage.parts
+      }
+    ]
+
+    const modelMessages = convertApiMessagesToModelMessages(trustedConversation.slice(-12))
 
     const imageParts = lastMessage.parts
       .filter((part): part is Extract<ApiMessagePart, { type: "file" }> => (
@@ -1663,7 +1971,7 @@ export async function POST(request: NextRequest) {
       }))
 
     const { data: selectedPage } = selectedPageId ? await insforge.database.from<PersistedPage>("pages")
-      .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt")
+      .select("id, name, rootStyles, htmlContent, metadata, position, createdAt, updatedAt")
       .eq("id", selectedPageId)
       .eq("projectId", projectId)
       .single()
@@ -1688,7 +1996,16 @@ export async function POST(request: NextRequest) {
     })
     const createCompletion = createInsforgeCompletion(insforge)
     const intentModelStrategy = getModelStrategy(modelProvider, "intent")
-    const intentResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+    const intentCompletion = createTrackedCompletionFactory(createCompletion, {
+      insforge,
+      userId: user.id,
+      projectId,
+      requestKind: "chat",
+      task: "intent",
+      modelProvider,
+      didTimeOut: activeOperationSignal.didTimeOut
+    })
+    const intentResult = await createChatCompletionWithRetries<CompletionResponse>(intentCompletion, {
       model: intentModelStrategy.model,
       messages: [
         {
@@ -1716,7 +2033,17 @@ export async function POST(request: NextRequest) {
     if (intent !== "chat") {
       try {
         const preflightModelStrategy = getModelStrategy(modelProvider, "analysis")
-        const preflightResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+        const preflightCompletion = createTrackedCompletionFactory(createCompletion, {
+          insforge,
+          userId: user.id,
+          projectId,
+          selectedPageId,
+          requestKind: intent,
+          task: "preflight",
+          modelProvider,
+          didTimeOut: activeOperationSignal.didTimeOut
+        })
+        const preflightResult = await createChatCompletionWithRetries<CompletionResponse>(preflightCompletion, {
           model: preflightModelStrategy.model,
           messages: [
             {
@@ -1843,10 +2170,22 @@ USER REQUEST: ${latestUserMessage}
               return
             }
 
+            const chatCompletion = createTrackedCompletionFactory(createCompletion, {
+              insforge,
+              userId: user.id,
+              projectId,
+              generationRequestId,
+              selectedPageId,
+              requestKind: "chat",
+              task: "chat",
+              modelProvider,
+              didTimeOut: activeOperationSignal.didTimeOut
+            })
+
             const chatText = preflight && !preflight.shouldGenerate
               ? preflight.assistantMessage
               : await (async () => {
-                const chatResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
+                const chatResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(chatCompletion, {
                   model: chatModelStrategy.model,
                   messages: [
                     {
@@ -1899,6 +2238,17 @@ USER REQUEST: ${latestUserMessage}
 
           genCardEmitted = true
           const analysisModelStrategy = getModelStrategy(modelProvider, "analysis")
+          const analysisCompletion = createTrackedCompletionFactory(createCompletion, {
+            insforge,
+            userId: user.id,
+            projectId,
+            generationRequestId,
+            selectedPageId,
+            requestKind: intent,
+            task: "analysis",
+            modelProvider,
+            didTimeOut: activeOperationSignal.didTimeOut
+          })
           const improvedUserPrompt = preflight?.improvedPrompt?.trim() || latestUserMessage
           const preflightText = preflight?.assistantMessage?.trim() || null
 
@@ -1906,7 +2256,7 @@ USER REQUEST: ${latestUserMessage}
             writeTextResponse(writer, preflightText)
           }
 
-          const analysisResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+          const analysisResult = await createChatCompletionWithRetries<CompletionResponse>(analysisCompletion, {
             model: analysisModelStrategy.model,
             messages: [
               {
@@ -1991,6 +2341,7 @@ USER REQUEST: ${latestUserMessage}
               userId: user.id,
               writer,
               projectId,
+              generationRequestId,
               selectedPage,
               latestUserParts: lastMessage.parts,
               latestUserMessage: improvedUserPrompt,
@@ -2026,6 +2377,7 @@ USER REQUEST: ${latestUserMessage}
             userId: user.id,
             writer,
             projectId,
+            generationRequestId,
             latestUserParts: lastMessage.parts,
             latestUserMessage: improvedUserPrompt,
             analysis,

@@ -20,6 +20,7 @@ create table if not exists public.pages (
   name text not null,
   "rootStyles" text not null,
   "htmlContent" text not null,
+  metadata jsonb not null default '{}'::jsonb,
   position integer not null default 0,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
@@ -50,6 +51,28 @@ create table if not exists public.generation_requests (
   unique ("projectId", "idempotencyKey")
 );
 
+create table if not exists public.generation_runs (
+  id uuid primary key default gen_random_uuid(),
+  "userId" text not null,
+  "projectId" uuid not null references public.projects(id) on delete cascade,
+  "generationRequestId" uuid null references public.generation_requests(id) on delete set null,
+  "selectedPageId" uuid null references public.pages(id) on delete set null,
+  "requestKind" text not null check ("requestKind" in ('chat', 'generate', 'regenerate')),
+  task text not null check (task in ('intent', 'preflight', 'chat', 'analysis', 'generate', 'regenerate')),
+  status text not null check (status in ('completed', 'failed', 'timed_out', 'canceled')),
+  model text not null,
+  provider text null,
+  attempt integer not null default 1,
+  "latencyMs" integer null,
+  "promptTokens" integer null,
+  "completionTokens" integer null,
+  "totalTokens" integer null,
+  metadata jsonb not null default '{}'::jsonb,
+  error text null,
+  "createdAt" timestamptz not null default now(),
+  "updatedAt" timestamptz not null default now()
+);
+
 alter table public.generation_requests
   add column if not exists "ipHash" text;
 
@@ -62,17 +85,67 @@ alter table public.projects
 alter table public.pages
   add column if not exists position integer;
 
+alter table public.pages
+  add column if not exists metadata jsonb;
+
 alter table public.messages
   add column if not exists "updatedAt" timestamptz;
 
+alter table public.generation_runs
+  add column if not exists provider text;
+
+alter table public.generation_runs
+  add column if not exists attempt integer;
+
+alter table public.generation_runs
+  add column if not exists "latencyMs" integer;
+
+alter table public.generation_runs
+  add column if not exists "promptTokens" integer;
+
+alter table public.generation_runs
+  add column if not exists "completionTokens" integer;
+
+alter table public.generation_runs
+  add column if not exists "totalTokens" integer;
+
+alter table public.generation_runs
+  add column if not exists metadata jsonb;
+
+alter table public.generation_runs
+  add column if not exists error text;
+
+alter table public.generation_runs
+  add column if not exists "updatedAt" timestamptz;
+
+alter table public.generation_runs
+  add column if not exists "generationRequestId" uuid;
+
+alter table public.generation_runs
+  add column if not exists "selectedPageId" uuid;
+
 alter table public.projects
+  alter column metadata set default '{}'::jsonb;
+
+alter table public.pages
   alter column metadata set default '{}'::jsonb;
 
 update public.projects
 set metadata = '{}'::jsonb
 where metadata is null;
 
+update public.pages
+set metadata = '{}'::jsonb
+where metadata is null;
+
+update public.generation_runs
+set metadata = '{}'::jsonb
+where metadata is null;
+
 alter table public.projects
+  alter column metadata set not null;
+
+alter table public.pages
   alter column metadata set not null;
 
 update public.projects
@@ -116,6 +189,32 @@ alter table public.messages
 alter table public.messages
   alter column "updatedAt" set not null;
 
+update public.generation_runs
+set attempt = 1
+where attempt is null;
+
+alter table public.generation_runs
+  alter column attempt set default 1;
+
+alter table public.generation_runs
+  alter column attempt set not null;
+
+alter table public.generation_runs
+  alter column metadata set default '{}'::jsonb;
+
+alter table public.generation_runs
+  alter column metadata set not null;
+
+update public.generation_runs
+set "updatedAt" = coalesce("createdAt", now())
+where "updatedAt" is null;
+
+alter table public.generation_runs
+  alter column "updatedAt" set default now();
+
+alter table public.generation_runs
+  alter column "updatedAt" set not null;
+
 create index if not exists projects_userid_createdat_idx
   on public.projects ("userId", "createdAt" desc);
 
@@ -127,6 +226,20 @@ create index if not exists pages_projectid_position_idx
 
 create index if not exists messages_projectid_createdat_idx
   on public.messages ("projectId", "createdAt" asc);
+
+create index if not exists generation_runs_projectid_createdat_idx
+  on public.generation_runs ("projectId", "createdAt" desc);
+
+create index if not exists generation_runs_requestid_createdat_idx
+  on public.generation_runs ("generationRequestId", "createdAt" desc)
+  where "generationRequestId" is not null;
+
+create index if not exists generation_runs_selectedpageid_createdat_idx
+  on public.generation_runs ("selectedPageId", "createdAt" desc)
+  where "selectedPageId" is not null;
+
+create index if not exists generation_runs_userid_createdat_idx
+  on public.generation_runs ("userId", "createdAt" desc);
 
 create index if not exists generation_requests_projectid_createdat_idx
   on public.generation_requests ("projectId", "createdAt" desc);
@@ -167,6 +280,12 @@ execute function public.set_updated_at();
 drop trigger if exists trg_messages_set_updated_at on public.messages;
 create trigger trg_messages_set_updated_at
 before update on public.messages
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists trg_generation_runs_set_updated_at on public.generation_runs;
+create trigger trg_generation_runs_set_updated_at
+before update on public.generation_runs
 for each row
 execute function public.set_updated_at();
 
@@ -557,6 +676,7 @@ returns table (
   name text,
   "rootStyles" text,
   "htmlContent" text,
+  metadata jsonb,
   position integer,
   "createdAt" timestamptz,
   "updatedAt" timestamptz
@@ -581,7 +701,8 @@ begin
     from jsonb_to_recordset(coalesce(p_pages, '[]'::jsonb)) as payload(
       name text,
       "rootStyles" text,
-      "htmlContent" text
+      "htmlContent" text,
+      metadata jsonb
     )
   ),
   existing_pages as (
@@ -590,12 +711,13 @@ begin
     where "projectId" = p_project_id
   ),
   inserted_pages as (
-    insert into public.pages ("projectId", name, "rootStyles", "htmlContent", position)
+    insert into public.pages ("projectId", name, "rootStyles", "htmlContent", metadata, position)
     select
       p_project_id,
       page_payload.name,
       page_payload."rootStyles",
       page_payload."htmlContent",
+      coalesce(page_payload.metadata, '{}'::jsonb),
       existing_pages.max_position + page_payload.offset + 1
     from page_payload
     cross join existing_pages
@@ -604,6 +726,7 @@ begin
       public.pages.name,
       public.pages."rootStyles",
       public.pages."htmlContent",
+      public.pages.metadata,
       public.pages.position,
       public.pages."createdAt",
       public.pages."updatedAt"
@@ -613,6 +736,7 @@ begin
     inserted_pages.name,
     inserted_pages."rootStyles",
     inserted_pages."htmlContent",
+    inserted_pages.metadata,
     inserted_pages.position,
     inserted_pages."createdAt",
     inserted_pages."updatedAt"
@@ -639,6 +763,7 @@ returns table (
   name text,
   "rootStyles" text,
   "htmlContent" text,
+  metadata jsonb,
   position integer,
   "createdAt" timestamptz,
   "updatedAt" timestamptz
@@ -665,6 +790,7 @@ begin
     public.pages.name,
     public.pages."rootStyles",
     public.pages."htmlContent",
+    public.pages.metadata,
     public.pages.position,
     public.pages."createdAt",
     public.pages."updatedAt";

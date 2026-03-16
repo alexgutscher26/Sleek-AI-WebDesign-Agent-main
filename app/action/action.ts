@@ -5,7 +5,7 @@ import { createChatCompletionWithRetries } from "@/lib/ai-retry"
 import { UIMessage } from "ai"
 import { parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation"
 import { getOwnedProjectBySlug } from "@/lib/project-access"
-import type { PageType } from "@/types/project"
+import type { PageMetadata, PageType } from "@/types/project"
 
 type CompatClient = Awaited<ReturnType<typeof getAuthServer>>["insforge"]
 
@@ -19,7 +19,7 @@ type CompletionResponse = {
 
 type ProjectPageRecord = Pick<
   PageType,
-  "id" | "name" | "rootStyles" | "htmlContent" | "projectId" | "createdAt" | "updatedAt" | "position"
+  "id" | "name" | "rootStyles" | "htmlContent" | "projectId" | "createdAt" | "updatedAt" | "position" | "metadata"
 >
 
 export const generateProjectTitle = async (message: string, insforgeClient?: CompatClient) => {
@@ -183,7 +183,7 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
     if (!project) return { error: "Project not found" }
 
     const { data: sourcePage, error: sourceError } = await insforge.database.from<ProjectPageRecord>("pages")
-      .select("id, name, rootStyles, htmlContent, position")
+      .select("*")
       .eq("projectId", project.id)
       .eq("id", pageId)
       .single()
@@ -205,16 +205,29 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
       copyIndex += 1
     }
 
-    const { data: duplicatedPage, error: duplicateError } = await insforge.database.from<ProjectPageRecord>("pages")
-      .insert([{
-        projectId: project.id,
-        name: nextName,
-        rootStyles: sourcePage.rootStyles,
-        htmlContent: sourcePage.htmlContent,
-        position: typeof sourcePage.position === "number" ? sourcePage.position + 1 : 0
-      }])
-      .select("id, name, rootStyles, htmlContent, position, createdAt, updatedAt, projectId")
+    const duplicatePayload = {
+      projectId: project.id,
+      name: nextName,
+      rootStyles: sourcePage.rootStyles,
+      htmlContent: sourcePage.htmlContent,
+      metadata: (sourcePage.metadata ?? {}) as PageMetadata,
+      position: typeof sourcePage.position === "number" ? sourcePage.position + 1 : 0
+    }
+
+    let duplicateResponse = await insforge.database.from<ProjectPageRecord>("pages")
+      .insert([duplicatePayload])
+      .select("*")
       .single()
+
+    if (duplicateResponse.error?.message?.toLowerCase().includes(`column "metadata" of relation "pages" does not exist`)) {
+      const { metadata: _metadata, ...legacyPayload } = duplicatePayload
+      duplicateResponse = await insforge.database.from<ProjectPageRecord>("pages")
+        .insert([legacyPayload])
+        .select("*")
+        .single()
+    }
+
+    const { data: duplicatedPage, error: duplicateError } = duplicateResponse
 
     if (duplicateError || !duplicatedPage) {
       return { error: "Failed to duplicate page" }

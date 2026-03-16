@@ -30,11 +30,12 @@ import {
   type ModelProvider
 } from "@/constants/model-provider"
 import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITY_SET, type StyleIntensity } from "@/constants/style-intensity"
+import { detectPromptInjection } from "@/lib/prompt-injection"
 
 const SLUG_ID_PATTERN = /^[A-Za-z0-9]{6,64}$/
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/
-const ALLOWED_MESSAGE_ROLES = new Set(["system", "user", "assistant"])
+const ALLOWED_MESSAGE_ROLES = new Set(["user", "assistant"])
 const ALLOWED_PART_TYPES = new Set(["text", "file"])
 const ALLOWED_FILE_MIME_TYPES_SET = new Set(ALLOWED_FILE_MIME_TYPES)
 
@@ -391,7 +392,7 @@ const validateMessage = (value: unknown, index: number) => {
   if (!ALLOWED_MESSAGE_ROLES.has(String(value.role))) {
     return {
       ok: false as const,
-      issue: { field: `${field}.role`, message: "Unsupported message role." }
+      issue: { field: `${field}.role`, message: "Only user and assistant message roles are supported." }
     }
   }
 
@@ -580,6 +581,21 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
       {
         field: "messages",
         message: `Total prompt text must be ${MAX_TOTAL_TEXT_LENGTH} characters or fewer.`
+      }
+    ])
+  }
+
+  const latestUserText = lastMessage.parts
+    .filter((part): part is Extract<ApiMessagePart, { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+
+  const injectionCheck = detectPromptInjection(latestUserText)
+  if (injectionCheck.blocked) {
+    throw new RequestValidationError([
+      {
+        field: "messages[last]",
+        message: "The latest user message appears to contain prompt-injection or instruction-override content."
       }
     ])
   }
