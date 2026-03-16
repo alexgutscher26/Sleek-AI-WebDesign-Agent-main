@@ -185,6 +185,7 @@ const ChatInput = ({
         <PromptInputAttachmentsDisplay />
         <PromptInputBody>
           <PromptInputTextarea
+            data-chat-input="true"
             onChange={(e) => setInput(e.target.value)}
             value={input}
             placeholder='Describe your design vision...'

@@ -49,6 +49,31 @@ type GenerationStreamData = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.isContentEditable ||
+    target.closest('[role="dialog"]') !== null
+  )
+}
+
+const focusChatInput = () => {
+  const input = document.querySelector<HTMLTextAreaElement>('[data-chat-input="true"]')
+  if (!input) {
+    return false
+  }
+
+  input.focus()
+  const length = input.value.length
+  input.setSelectionRange(length, length)
+  return true
+}
+
 const fileToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result ?? ""));
@@ -331,9 +356,7 @@ const ChatInterface = ({
     )
   }, [pathname, hasStarted, isProjectPage, setMessages])
 
-
-
-  const { selectedPageId } = useCanvas()
+  const { selectedPageId, setSelectedPageId } = useCanvas()
 
   const isLoading = status === "submitted" || status === "streaming"
 
@@ -382,6 +405,61 @@ const ChatInterface = ({
     router.push("/");
   }
 
+  const selectedPage = pages.find((p) => p.id === selectedPageId);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return
+      }
+
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key.toLowerCase() === "c" && !isEditableTarget(event.target)) {
+          if (focusChatInput()) {
+            event.preventDefault()
+          }
+          return
+        }
+
+        if ((event.key === "[" || event.key === "]") && pages.length > 0 && !isEditableTarget(event.target)) {
+          event.preventDefault()
+
+          const currentIndex = pages.findIndex((page) => page.id === selectedPageId)
+          const fallbackIndex = event.key === "]" ? 0 : pages.length - 1
+          const nextIndex = currentIndex === -1
+            ? fallbackIndex
+            : (currentIndex + (event.key === "]" ? 1 : -1) + pages.length) % pages.length
+
+          setSelectedPageId(pages[nextIndex]?.id ?? null)
+          return
+        }
+      }
+
+      if (event.key === "Escape") {
+        const activeElement = document.activeElement
+        if (activeElement instanceof HTMLElement && activeElement.dataset.chatInput === "true") {
+          activeElement.blur()
+          event.preventDefault()
+          return
+        }
+
+        if (selectedPageId) {
+          setSelectedPageId(null)
+          event.preventDefault()
+          return
+        }
+
+        if (isLoading) {
+          stop()
+          event.preventDefault()
+        }
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [isLoading, pages, selectedPageId, setSelectedPageId, stop])
+
   if (!isProjectPage && !hasStarted) {
     return (
       <NewProjectChat
@@ -414,9 +492,6 @@ const ChatInterface = ({
       </div>
     )
   }
-
-
-  const selectedPage = pages.find((p) => p.id === selectedPageId);
 
 
   return (

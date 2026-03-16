@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { TOOL_MODE_ENUM, ToolModeType } from '@/constants/canvas'
 import { cn } from '@/lib/utils';
@@ -68,8 +68,14 @@ const Canvas = ({ isProjectLoading, pages, setPages, slugId }: PropsType) => {
           setCurrentScale(ref.state.scale)
         }}
       >
-        {({ zoomIn, zoomOut }) => (
+        {({ zoomIn, zoomOut, resetTransform }) => (
           <>
+            <CanvasKeyboardShortcuts
+              setToolMode={setToolMode}
+              zoomIn={zoomIn}
+              zoomOut={zoomOut}
+              resetTransform={resetTransform}
+            />
             <div
               className={cn(
                 `absolute inset-0 h-full w-full bg-[#eee] p-3 dark:bg-[#101010]`,
@@ -151,6 +157,79 @@ const Canvas = ({ isProjectLoading, pages, setPages, slugId }: PropsType) => {
       </TransformWrapper>
     </div>
   )
+}
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.isContentEditable ||
+    target.closest('[role="dialog"]') !== null
+  )
+}
+
+const CanvasKeyboardShortcuts = ({
+  setToolMode,
+  zoomIn,
+  zoomOut,
+  resetTransform,
+}: {
+  setToolMode: (toolMode: ToolModeType) => void
+  zoomIn: () => void
+  zoomOut: () => void
+  resetTransform: () => void
+}) => {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+        return
+      }
+
+      if (isEditableTarget(event.target)) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+
+      if (key === "v") {
+        event.preventDefault()
+        setToolMode(TOOL_MODE_ENUM.SELECT)
+        return
+      }
+
+      if (key === "h") {
+        event.preventDefault()
+        setToolMode(TOOL_MODE_ENUM.HAND)
+        return
+      }
+
+      if (key === "+" || key === "=") {
+        event.preventDefault()
+        zoomIn()
+        return
+      }
+
+      if (key === "-") {
+        event.preventDefault()
+        zoomOut()
+        return
+      }
+
+      if (key === "0") {
+        event.preventDefault()
+        resetTransform()
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [resetTransform, setToolMode, zoomIn, zoomOut])
+
+  return null
 }
 
 export default Canvas
