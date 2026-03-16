@@ -4,6 +4,13 @@ import { createValidationErrorResponse, parseSlugRouteParams, RequestValidationE
 import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
 
+type ProjectMessageRecord = {
+  id: string
+  role: string
+  parts: unknown
+  createdAt?: string
+}
+
 
 export async function GET(req: NextRequest,
   { params }: { params: Promise<{ slugId: string }> }
@@ -25,7 +32,7 @@ export async function GET(req: NextRequest,
 
     if (error) throw new Error("Project failed fetch");
 
-    const { data: messages } = await insforge.database.from("messages")
+    const { data: messages } = await insforge.database.from<ProjectMessageRecord[]>("messages")
       .select("*")
       .eq("projectId", project.id)
       .order("createdAt", { ascending: true })

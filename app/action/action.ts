@@ -2,10 +2,12 @@
 
 import { getAuthServer } from "@/lib/insforge-server"
 import { createChatCompletionWithRetries } from "@/lib/ai-retry"
-import type { InsForgeClient } from "@insforge/sdk"
 import { UIMessage } from "ai"
 import { parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation"
 import { getOwnedProjectBySlug } from "@/lib/project-access"
+import type { PageType } from "@/types/project"
+
+type CompatClient = Awaited<ReturnType<typeof getAuthServer>>["insforge"]
 
 type CompletionResponse = {
   choices: Array<{
@@ -15,13 +17,18 @@ type CompletionResponse = {
   }>
 }
 
-export const generateProjectTitle = async (message: string, insforgeClient?: InsForgeClient) => {
+type ProjectPageRecord = Pick<
+  PageType,
+  "id" | "name" | "rootStyles" | "htmlContent" | "projectId" | "createdAt" | "updatedAt"
+>
+
+export const generateProjectTitle = async (message: string, insforgeClient?: CompatClient) => {
   try {
     const insforge = insforgeClient ?? (await getAuthServer()).insforge
     const createCompletion = <T,>(options: Record<string, unknown>) => (
       insforge.ai.chat.completions.create(
         options as Parameters<typeof insforge.ai.chat.completions.create>[0]
-      ) as Promise<T>
+      ) as unknown as Promise<T>
     )
 
     const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
@@ -136,7 +143,7 @@ export const renamePageAction = async (slugId: string, pageId: string, name: str
     )
     if (!project) return { error: "Project not found" }
 
-    const { data: page, error } = await insforge.database.from("pages")
+    const { data: page, error } = await insforge.database.from<ProjectPageRecord>("pages")
       .update({ name: trimmedName })
       .eq("projectId", project.id)
       .eq("id", pageId)
@@ -170,7 +177,7 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
     )
     if (!project) return { error: "Project not found" }
 
-    const { data: sourcePage, error: sourceError } = await insforge.database.from("pages")
+    const { data: sourcePage, error: sourceError } = await insforge.database.from<ProjectPageRecord>("pages")
       .select("id, name, rootStyles, htmlContent")
       .eq("projectId", project.id)
       .eq("id", pageId)
@@ -180,7 +187,7 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
       return { error: "Page not found" }
     }
 
-    const { data: siblingPages } = await insforge.database.from("pages")
+    const { data: siblingPages } = await insforge.database.from<Array<Pick<PageType, "name">>>("pages")
       .select("name")
       .eq("projectId", project.id)
 
@@ -192,7 +199,7 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
       copyIndex += 1
     }
 
-    const { data: duplicatedPage, error: duplicateError } = await insforge.database.from("pages")
+    const { data: duplicatedPage, error: duplicateError } = await insforge.database.from<ProjectPageRecord>("pages")
       .insert([{
         projectId: project.id,
         name: nextName,

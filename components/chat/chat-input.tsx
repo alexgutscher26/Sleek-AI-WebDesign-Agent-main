@@ -1,7 +1,7 @@
 import { ChatStatus } from 'ai';
 import React, { useState } from 'react'
 import { PromptInput, PromptInputActionAddAttachments, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputBody, PromptInputFooter, PromptInputMessage, PromptInputSubmit, PromptInputTextarea, PromptInputTools, usePromptInputAttachments } from '../ai-elements/prompt-input';
-import { SignInButton, SignUpButton, useAuth } from '@insforge/nextjs';
+import { SignInButton, SignUpButton, useAuth } from '@clerk/nextjs';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '../ui/item';
 import { ArrowUpIcon, LockIcon, Square, XIcon } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -10,18 +10,30 @@ import { PageType } from '@/types/project';
 import { Badge } from '../ui/badge';
 import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from '@/lib/request-limits';
 import { toast } from 'sonner';
+import { CONTENT_DEPTHS, DEFAULT_CONTENT_DEPTH, type ContentDepth } from '@/constants/content-depth';
+import { CREATIVITY_LEVELS, DEFAULT_CREATIVITY_LEVEL, type CreativityLevel } from '@/constants/creativity-level';
 import { DEFAULT_GENERATION_MODE, GENERATION_MODES, type GenerationMode } from '@/constants/generation-mode';
+import { DEFAULT_LAYOUT_COMPLEXITY, LAYOUT_COMPLEXITIES, type LayoutComplexity } from '@/constants/layout-complexity';
+import { DEFAULT_MODEL_PROVIDER, MODEL_PROVIDERS, type ModelProvider } from '@/constants/model-provider';
 import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITIES, type StyleIntensity } from '@/constants/style-intensity';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 type ChatInputProps = {
+  contentDepth: ContentDepth;
+  creativityLevel: CreativityLevel;
   generationMode: GenerationMode;
+  layoutComplexity: LayoutComplexity;
+  modelProvider: ModelProvider;
   styleIntensity: StyleIntensity;
   input: string;
   isLoading: boolean;
   status: ChatStatus;
   selectedPage?: PageType;
+  setContentDepth: (depth: ContentDepth) => void;
+  setCreativityLevel: (level: CreativityLevel) => void;
   setGenerationMode: (mode: GenerationMode) => void;
+  setLayoutComplexity: (complexity: LayoutComplexity) => void;
+  setModelProvider: (provider: ModelProvider) => void;
   setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
   onClearSelectedPage: () => void;
@@ -30,13 +42,21 @@ type ChatInputProps = {
 }
 
 const ChatInput = ({
+  contentDepth,
+  creativityLevel,
   generationMode,
+  layoutComplexity,
+  modelProvider,
   styleIntensity,
   input,
   isLoading,
   status,
   selectedPage,
+  setContentDepth,
+  setCreativityLevel,
   setGenerationMode,
+  setLayoutComplexity,
+  setModelProvider,
   setStyleIntensity,
   setInput,
   onClearSelectedPage,
@@ -45,7 +65,11 @@ const ChatInput = ({
 }: ChatInputProps) => {
   const { isSignedIn } = useAuth()
   const [showAuthBanner, setShowAuthBanner] = useState(false)
+  const selectedContentDepth = CONTENT_DEPTHS.find((level) => level.value === contentDepth)
+  const selectedCreativity = CREATIVITY_LEVELS.find((level) => level.value === creativityLevel)
   const selectedMode = GENERATION_MODES.find((mode) => mode.value === generationMode)
+  const selectedLayoutComplexity = LAYOUT_COMPLEXITIES.find((level) => level.value === layoutComplexity)
+  const selectedProvider = MODEL_PROVIDERS.find((provider) => provider.value === modelProvider)
   const selectedIntensity = STYLE_INTENSITIES.find((intensity) => intensity.value === styleIntensity)
 
   const handleSubmit = (message: PromptInputMessage) => {
@@ -56,7 +80,11 @@ const ChatInput = ({
 
     setShowAuthBanner(false);
     onSubmit(message, {
+      contentDepth,
+      creativityLevel,
       generationMode,
+      layoutComplexity,
+      modelProvider,
       styleIntensity,
       selectedPageId: selectedPage?.id
     });
@@ -135,6 +163,75 @@ const ChatInput = ({
           </div>
           <div className='flex flex-wrap items-center justify-end gap-2'>
             <Select
+              value={contentDepth}
+              onValueChange={(value) => setContentDepth(value as ContentDepth)}
+            >
+              <SelectTrigger className='h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs'>
+                <SelectValue placeholder={DEFAULT_CONTENT_DEPTH}>
+                  {selectedContentDepth?.label ?? DEFAULT_CONTENT_DEPTH}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {CONTENT_DEPTHS.map((level) => (
+                  <SelectItem key={level.value} value={level.value}>
+                    <div className='flex flex-col'>
+                      <span>{level.label}</span>
+                      <span className='text-[11px] text-muted-foreground'>
+                        {level.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={modelProvider}
+              onValueChange={(value) => setModelProvider(value as ModelProvider)}
+            >
+              <SelectTrigger className='h-8 min-w-36 max-w-44 rounded-full border-border/70 bg-muted/30 text-xs'>
+                <SelectValue placeholder={DEFAULT_MODEL_PROVIDER}>
+                  {selectedProvider?.label ?? DEFAULT_MODEL_PROVIDER}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {MODEL_PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.value} value={provider.value}>
+                    <div className='flex flex-col'>
+                      <span>{provider.label}</span>
+                      <span className='text-[11px] text-muted-foreground'>
+                        {provider.latencyHint} · {provider.costHint}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={creativityLevel}
+              onValueChange={(value) => setCreativityLevel(value as CreativityLevel)}
+            >
+              <SelectTrigger className='h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs'>
+                <SelectValue placeholder={DEFAULT_CREATIVITY_LEVEL}>
+                  {selectedCreativity?.label ?? DEFAULT_CREATIVITY_LEVEL}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {CREATIVITY_LEVELS.map((level) => (
+                  <SelectItem key={level.value} value={level.value}>
+                    <div className='flex flex-col'>
+                      <span>{level.label}</span>
+                      <span className='text-[11px] text-muted-foreground'>
+                        {level.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
               value={generationMode}
               onValueChange={(value) => setGenerationMode(value as GenerationMode)}
             >
@@ -150,6 +247,29 @@ const ChatInput = ({
                       <span>{mode.label}</span>
                       <span className='text-[11px] text-muted-foreground'>
                         {mode.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={layoutComplexity}
+              onValueChange={(value) => setLayoutComplexity(value as LayoutComplexity)}
+            >
+              <SelectTrigger className='h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs'>
+                <SelectValue placeholder={DEFAULT_LAYOUT_COMPLEXITY}>
+                  {selectedLayoutComplexity?.label ?? DEFAULT_LAYOUT_COMPLEXITY}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {LAYOUT_COMPLEXITIES.map((level) => (
+                  <SelectItem key={level.value} value={level.value}>
+                    <div className='flex flex-col'>
+                      <span>{level.label}</span>
+                      <span className='text-[11px] text-muted-foreground'>
+                        {level.description}
                       </span>
                     </div>
                   </SelectItem>

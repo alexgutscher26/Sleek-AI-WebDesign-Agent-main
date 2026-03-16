@@ -6,16 +6,28 @@ import ChatInput from './chat-input';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { EmptyState, ErrorState } from '../ui/view-state';
+import type { ContentDepth } from '@/constants/content-depth';
+import type { CreativityLevel } from '@/constants/creativity-level';
 import type { GenerationMode } from '@/constants/generation-mode';
+import type { LayoutComplexity } from '@/constants/layout-complexity';
+import type { ModelProvider } from '@/constants/model-provider';
 import type { StyleIntensity } from '@/constants/style-intensity';
 
 type PropsType = {
   input: string;
+  contentDepth: ContentDepth;
+  creativityLevel: CreativityLevel;
   generationMode: GenerationMode;
+  layoutComplexity: LayoutComplexity;
+  modelProvider: ModelProvider;
   styleIntensity: StyleIntensity;
   isLoading: boolean;
   status: ChatStatus;
+  setContentDepth: (depth: ContentDepth) => void;
+  setCreativityLevel: (level: CreativityLevel) => void;
   setGenerationMode: (mode: GenerationMode) => void;
+  setLayoutComplexity: (complexity: LayoutComplexity) => void;
+  setModelProvider: (provider: ModelProvider) => void;
   setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
   onStop: () => void;
@@ -24,11 +36,19 @@ type PropsType = {
 
 const NewProjectChat = ({
   input,
+  contentDepth,
+  creativityLevel,
   generationMode,
+  layoutComplexity,
+  modelProvider,
   styleIntensity,
   isLoading,
   status,
+  setContentDepth,
+  setCreativityLevel,
   setGenerationMode,
+  setLayoutComplexity,
+  setModelProvider,
   setStyleIntensity,
   setInput,
   onStop,
@@ -128,11 +148,19 @@ const NewProjectChat = ({
           >
             <ChatInput
               input={input}
+              contentDepth={contentDepth}
+              creativityLevel={creativityLevel}
               generationMode={generationMode}
+              layoutComplexity={layoutComplexity}
+              modelProvider={modelProvider}
               styleIntensity={styleIntensity}
               isLoading={isLoading}
               status={status}
+              setContentDepth={setContentDepth}
+              setCreativityLevel={setCreativityLevel}
               setGenerationMode={setGenerationMode}
+              setLayoutComplexity={setLayoutComplexity}
+              setModelProvider={setModelProvider}
               setStyleIntensity={setStyleIntensity}
               setInput={setInput}
               onClearSelectedPage={() => undefined}

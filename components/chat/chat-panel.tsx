@@ -9,17 +9,29 @@ import { CheckCircle2, AlertCircleIcon, Circle } from 'lucide-react';
 import { Spinner } from '../ui/spinner';
 import { PageType } from '@/types/project';
 import { ErrorState, LoadingState } from '../ui/view-state';
+import type { ContentDepth } from '@/constants/content-depth';
+import type { CreativityLevel } from '@/constants/creativity-level';
 import type { GenerationMode } from '@/constants/generation-mode';
+import type { LayoutComplexity } from '@/constants/layout-complexity';
+import type { ModelProvider } from '@/constants/model-provider';
 import type { StyleIntensity } from '@/constants/style-intensity';
 
 type PropsType = {
   className?: string;
+  contentDepth: ContentDepth;
+  creativityLevel: CreativityLevel;
   generationMode: GenerationMode;
+  layoutComplexity: LayoutComplexity;
+  modelProvider: ModelProvider;
   styleIntensity: StyleIntensity;
   input: string;
   isLoading: boolean;
   isProjectLoading?: boolean;
+  setContentDepth: (depth: ContentDepth) => void;
+  setCreativityLevel: (level: CreativityLevel) => void;
   setGenerationMode: (mode: GenerationMode) => void;
+  setLayoutComplexity: (complexity: LayoutComplexity) => void;
+  setModelProvider: (provider: ModelProvider) => void;
   setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
   messages: UIMessage[];
@@ -40,12 +52,20 @@ type GenerationCardData = {
 
 const ChatPanel = ({
   className,
+  contentDepth,
+  creativityLevel,
   generationMode,
+  layoutComplexity,
+  modelProvider,
   styleIntensity,
   input,
   isLoading,
   setInput,
+  setContentDepth,
+  setCreativityLevel,
   setGenerationMode,
+  setLayoutComplexity,
+  setModelProvider,
   setStyleIntensity,
   messages,
   onStop,
@@ -149,12 +169,20 @@ const ChatPanel = ({
       <div className="border-t bg-background p-3 md:p-4">
         <ChatInput
           input={input}
+          contentDepth={contentDepth}
+          creativityLevel={creativityLevel}
           generationMode={generationMode}
+          layoutComplexity={layoutComplexity}
+          modelProvider={modelProvider}
           styleIntensity={styleIntensity}
           isLoading={isLoading}
           status={status}
           selectedPage={selectedPage}
+          setContentDepth={setContentDepth}
+          setCreativityLevel={setCreativityLevel}
           setGenerationMode={setGenerationMode}
+          setLayoutComplexity={setLayoutComplexity}
+          setModelProvider={setModelProvider}
           setStyleIntensity={setStyleIntensity}
           setInput={setInput}
           onClearSelectedPage={onClearSelectedPage}

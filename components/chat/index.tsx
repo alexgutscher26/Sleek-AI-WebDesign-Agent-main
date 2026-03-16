@@ -15,7 +15,11 @@ import { PageType } from "@/types/project";
 import { useQuery } from "@tanstack/react-query";
 import { useCanvas } from "@/hooks/use-canvas";
 import { ErrorState } from "../ui/view-state";
+import { DEFAULT_CONTENT_DEPTH, type ContentDepth } from "@/constants/content-depth";
+import { DEFAULT_CREATIVITY_LEVEL, type CreativityLevel } from "@/constants/creativity-level";
 import { DEFAULT_GENERATION_MODE, type GenerationMode } from "@/constants/generation-mode";
+import { DEFAULT_LAYOUT_COMPLEXITY, type LayoutComplexity } from "@/constants/layout-complexity";
+import { DEFAULT_MODEL_PROVIDER, type ModelProvider } from "@/constants/model-provider";
 import { DEFAULT_STYLE_INTENSITY, type StyleIntensity } from "@/constants/style-intensity";
 import { TOOL_MODE_ENUM, type ToolModeType } from "@/constants/canvas";
 
@@ -175,7 +179,11 @@ const ChatInterface = ({
 
 
   const [input, setInput] = useState("")
+  const [contentDepth, setContentDepth] = useState<ContentDepth>(DEFAULT_CONTENT_DEPTH)
+  const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>(DEFAULT_CREATIVITY_LEVEL)
   const [generationMode, setGenerationMode] = useState<GenerationMode>(DEFAULT_GENERATION_MODE)
+  const [layoutComplexity, setLayoutComplexity] = useState<LayoutComplexity>(DEFAULT_LAYOUT_COMPLEXITY)
+  const [modelProvider, setModelProvider] = useState<ModelProvider>(DEFAULT_MODEL_PROVIDER)
   const [styleIntensity, setStyleIntensity] = useState<StyleIntensity>(DEFAULT_STYLE_INTENSITY)
   const [hasStarted, setHasStarted] = useState(isProjectPage);
   const [projectTitle, setProjectTitle] = useState<string | null>(null)
@@ -615,7 +623,12 @@ const ChatInterface = ({
         body: {
           ...options,
           idempotencyKey: crypto.randomUUID().replace(/-/g, "_"),
+          contentDepth,
+          creativityLevel,
           generationMode,
+          layoutComplexity,
+          modelProvider,
+          styleIntensity,
           slugId
         }
       }
@@ -720,9 +733,17 @@ const ChatInterface = ({
       <NewProjectChat
         input={input}
         setInput={handleInputChange}
+        contentDepth={contentDepth}
+        creativityLevel={creativityLevel}
         generationMode={generationMode}
+        layoutComplexity={layoutComplexity}
+        modelProvider={modelProvider}
         styleIntensity={styleIntensity}
+        setContentDepth={setContentDepth}
+        setCreativityLevel={setCreativityLevel}
         setGenerationMode={setGenerationMode}
+        setLayoutComplexity={setLayoutComplexity}
+        setModelProvider={setModelProvider}
         setStyleIntensity={setStyleIntensity}
         isLoading={isLoading}
         status={status}
@@ -805,9 +826,17 @@ const ChatInterface = ({
           messages={messages}
           input={input}
           setInput={handleInputChange}
+          contentDepth={contentDepth}
+          creativityLevel={creativityLevel}
           generationMode={generationMode}
+          layoutComplexity={layoutComplexity}
+          modelProvider={modelProvider}
           styleIntensity={styleIntensity}
+          setContentDepth={setContentDepth}
+          setCreativityLevel={setCreativityLevel}
           setGenerationMode={setGenerationMode}
+          setLayoutComplexity={setLayoutComplexity}
+          setModelProvider={setModelProvider}
           setStyleIntensity={setStyleIntensity}
           isLoading={isLoading}
           isProjectLoading={isProjectLoading}

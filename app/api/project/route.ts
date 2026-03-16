@@ -3,7 +3,11 @@ import { convertModelMessages, generateProjectTitle } from "@/app/action/action"
 import { getAuthServer } from "@/lib/insforge-server";
 import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMessage, UIMessageStreamWriter } from "ai";
 import {
+  CONTENT_DEPTH_PROMPT_GUIDANCE,
+  CREATIVITY_LEVEL_PROMPT_GUIDANCE,
   GENERATION_MODE_PROMPT_GUIDANCE,
+  LAYOUT_COMPLEXITY_PROMPT_GUIDANCE,
+  PRE_GENERATION_PREFLIGHT_PROMPT,
   SLEEK_CHAT_PROMPT,
   SLEEK_INTENT_PROMPT,
   STYLE_INTENSITY_PROMPT_GUIDANCE,
@@ -19,6 +23,10 @@ import {
 } from "@/lib/api-validation";
 import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
+import { DEFAULT_CONTENT_DEPTH } from "@/constants/content-depth";
+import { DEFAULT_CREATIVITY_LEVEL } from "@/constants/creativity-level";
+import { DEFAULT_LAYOUT_COMPLEXITY } from "@/constants/layout-complexity";
+import { type ModelProvider } from "@/constants/model-provider";
 import { DEFAULT_STYLE_INTENSITY } from "@/constants/style-intensity";
 import { createChatCompletionWithRetries, isAbortLikeError } from "@/lib/ai-retry";
 import { createHash } from "node:crypto";
@@ -48,6 +56,24 @@ type PersistedPage = {
   htmlContent: string
 }
 
+type PersistedProject = {
+  id: string
+  title: string
+  slugId?: string
+}
+
+type ProjectOwnershipRecord = {
+  id: string
+  userId: string
+}
+
+type PersistedMessage = {
+  id: string
+  role: string
+  parts: ApiMessagePart[]
+  createdAt?: string
+}
+
 type GeneratedPageDraft = {
   tempId: string
   name: string
@@ -66,6 +92,13 @@ type AnalysisPage = {
 type AnalysisResult = {
   rootStyles?: string
   pages: AnalysisPage[]
+}
+
+type PreflightResult = {
+  shouldGenerate: boolean
+  improvedPrompt: string
+  assistantMessage: string
+  clarifyingQuestions: string[]
 }
 
 type StreamWriter = UIMessageStreamWriter<UIMessage>
@@ -98,11 +131,13 @@ type StoredResponse =
   | {
       kind: "generate"
       pages: PersistedPage[]
+      preflightText?: string
       summaryText: string
     }
   | {
       kind: "regenerate"
       page: PersistedPage
+      preflightText?: string
       summaryText: string
     }
 
@@ -122,7 +157,86 @@ type RouteDeps = {
   latestUserParts: ApiMessagePart[]
 }
 
+type ModelTask = "intent" | "chat" | "analysis" | "generate" | "regenerate"
+
+type ModelStrategy = {
+  model: string
+  fallbackModels: string[]
+}
+
 const GENERATION_TIMEOUT_MS = 480_000
+const ANALYSIS_MAX_TOKENS = 12000
+const GENERATION_MAX_TOKENS = 14000
+
+const getModelStrategy = (
+  provider: ModelProvider,
+  task: ModelTask
+): ModelStrategy => {
+  if (provider === "gemini") {
+    switch (task) {
+      case "intent":
+        return {
+          model: "google/gemini-2.5-pro",
+          fallbackModels: ["google/gemini-3-flash-preview"]
+        }
+      case "chat":
+        return {
+          model: "google/gemini-2.5-pro",
+          fallbackModels: ["google/gemini-3-flash-preview"]
+        }
+      case "analysis":
+        return {
+          model: "google/gemini-2.5-pro",
+          fallbackModels: ["google/gemini-3-flash-preview"]
+        }
+      case "generate":
+        return {
+          model: "google/gemini-3.1-pro-preview",
+          fallbackModels: ["google/gemini-2.5-pro", "google/gemini-3-flash-preview"]
+        }
+      case "regenerate":
+        return {
+          model: "google/gemini-3-flash-preview",
+          fallbackModels: ["google/gemini-2.5-pro", "google/gemini-2.5-flash-lite"]
+        }
+    }
+  }
+
+  if (provider === "claude") {
+    return {
+      model: "anthropic/claude-sonnet-4.5",
+      fallbackModels: []
+    }
+  }
+
+  switch (task) {
+    case "intent":
+      return {
+        model: "anthropic/claude-sonnet-4.5",
+        fallbackModels: ["google/gemini-2.5-pro"]
+      }
+    case "chat":
+      return {
+        model: "google/gemini-2.5-pro",
+        fallbackModels: ["anthropic/claude-sonnet-4.5"]
+      }
+    case "analysis":
+      return {
+        model: "anthropic/claude-sonnet-4.5",
+        fallbackModels: ["google/gemini-2.5-pro"]
+      }
+    case "generate":
+      return {
+        model: "google/gemini-3.1-pro-preview",
+        fallbackModels: ["google/gemini-2.5-pro", "google/gemini-3-flash-preview"]
+      }
+    case "regenerate":
+      return {
+        model: "google/gemini-3-flash-preview",
+        fallbackModels: ["google/gemini-2.5-pro", "google/gemini-2.5-flash-lite"]
+      }
+  }
+}
 
 export async function GET() {
   try {
@@ -239,11 +353,56 @@ const prepareGeneratedHtml = (rawHtml: string) => {
   return sanitized.html
 }
 
+const parsePreflightResult = (
+  preflightText: string,
+  options: {
+    latestUserMessage: string
+  }
+): PreflightResult => {
+  try {
+    const jsonStart = preflightText.indexOf("{")
+    const jsonEnd = preflightText.lastIndexOf("}")
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error("No JSON object found")
+    }
+
+    const parsed = JSON.parse(preflightText.substring(jsonStart, jsonEnd + 1)) as Partial<PreflightResult>
+    const clarifyingQuestions = Array.isArray(parsed.clarifyingQuestions)
+      ? parsed.clarifyingQuestions.filter((question): question is string => (
+        typeof question === "string" && question.trim().length > 0
+      ))
+      : []
+
+    return {
+      shouldGenerate: parsed.shouldGenerate !== false,
+      improvedPrompt: typeof parsed.improvedPrompt === "string" && parsed.improvedPrompt.trim().length > 0
+        ? parsed.improvedPrompt.trim()
+        : options.latestUserMessage,
+      assistantMessage: typeof parsed.assistantMessage === "string"
+        ? parsed.assistantMessage.trim()
+        : "",
+      clarifyingQuestions
+    }
+  } catch (error) {
+    console.log("Preflight parse fallback", error)
+
+    return {
+      shouldGenerate: true,
+      improvedPrompt: options.latestUserMessage,
+      assistantMessage: "",
+      clarifyingQuestions: []
+    }
+  }
+}
+
 const parseAnalysisResult = (
   analysisText: string,
   options: {
     latestUserMessage: string
+    contentDepth: string
+    creativityLevel: string
     generationMode: string
+    layoutComplexity: string
     styleIntensity: string
     selectedPage?: PersistedPage | null
     isRegen: boolean
@@ -288,7 +447,7 @@ const parseAnalysisResult = (
           id: generateId(),
           name: "Home",
           purpose: `${options.generationMode} experience`,
-          visualDescription: `${options.latestUserMessage}\nStyle intensity: ${options.styleIntensity}`,
+          visualDescription: `${options.latestUserMessage}\nContent depth: ${options.contentDepth}\nCreativity level: ${options.creativityLevel}\nLayout complexity: ${options.layoutComplexity}\nStyle intensity: ${options.styleIntensity}`,
           rootStyles: ""
         }
       ]
@@ -299,7 +458,7 @@ const parseAnalysisResult = (
 const createInsforgeCompletion = (insforge: RouteInsforge) => <T,>(options: Record<string, unknown>) => (
   insforge.ai.chat.completions.create(
     options as Parameters<RouteInsforge["ai"]["chat"]["completions"]["create"]>[0]
-  ) as Promise<T>
+  ) as unknown as Promise<T>
 )
 
 const safeDeleteProject = async (insforge: RouteInsforge, projectId: string) => {
@@ -333,6 +492,39 @@ const isLegacyGenerationRequestSchemaError = (error: unknown) => {
     message.includes(`p_ip_hash`) ||
     message.includes(`function begin_generation_request(`)
   )
+}
+
+const getBackendUnavailableMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("No backend services available for app:")
+    ? "InsForge backend services are not available for the configured app. Open your InsForge project and provision its backend services before generating."
+    : null
+}
+
+const getAiProviderErrorMessage = (error: unknown) => {
+  const status = error && typeof error === "object" && "status" in error
+    ? Number((error as { status?: unknown }).status)
+    : NaN
+  const message = error instanceof Error ? error.message : String(error)
+  const normalizedMessage = message.toLowerCase()
+
+  if (status === 401 || normalizedMessage.includes("401 user not found")) {
+    return "AI provider authentication failed. This is not a database users-table issue. Check your OPENROUTER_API_KEY or OPENAI_API_KEY and make sure the key belongs to an active account."
+  }
+
+  if (status === 402 || normalizedMessage.includes("requires more credits") || normalizedMessage.includes("fewer max_tokens")) {
+    return "OpenRouter rejected this request because the token budget is too high for your current credits. Try again with the reduced limits now in place, or add credits if you still want larger generations."
+  }
+
+  if (normalizedMessage.includes("invalid api key") || normalizedMessage.includes("incorrect api key")) {
+    return "The configured AI API key is invalid. Update your OPENROUTER_API_KEY or OPENAI_API_KEY and try again."
+  }
+
+  if (normalizedMessage.includes("model") && normalizedMessage.includes("not found")) {
+    return "The selected AI model is not available for your current provider. If you want Claude or Gemini models, use OpenRouter; if you use OpenAI directly, switch to OpenAI-supported models."
+  }
+
+  return null
 }
 
 const getOrCreateProjectAtomic = async (
@@ -501,6 +693,13 @@ const replayStoredResponse = async (
       return
     }
     case "generate": {
+      if (response.preflightText) {
+        const preflightTextId = generateId()
+        writer.write({ type: "text-start", id: preflightTextId })
+        writer.write({ type: "text-delta", id: preflightTextId, delta: response.preflightText })
+        writer.write({ type: "text-end", id: preflightTextId })
+      }
+
       emit(writer, "generation", {
         status: "complete",
         pages: response.pages.map((page) => ({
@@ -529,6 +728,13 @@ const replayStoredResponse = async (
       return
     }
     case "regenerate": {
+      if (response.preflightText) {
+        const preflightTextId = generateId()
+        writer.write({ type: "text-start", id: preflightTextId })
+        writer.write({ type: "text-delta", id: preflightTextId, delta: response.preflightText })
+        writer.write({ type: "text-end", id: preflightTextId })
+      }
+
       emit(writer, "page-created", {
         persisted: true,
         page: {
@@ -602,6 +808,7 @@ const persistMessagePair = async (
 const persistGeneratedState = async (
   deps: RouteDeps,
   generatedPages: GeneratedPageDraft[],
+  preflightText: string | null,
   summaryText: string
 ) => {
   const { insforge, projectId, latestUserParts } = deps
@@ -611,6 +818,7 @@ const persistGeneratedState = async (
       p_project_id: projectId,
       p_user_parts: latestUserParts,
       p_assistant_parts: [
+        ...(preflightText ? [{ type: "text", text: preflightText }] : []),
         {
           type: "data-generation",
           id: "gen-card",
@@ -647,7 +855,7 @@ const persistGeneratedState = async (
     }
   }
 
-  const { data: savedPages, error: pagesError } = await insforge.database.from("pages").insert(
+  const { data: savedPages, error: pagesError } = await insforge.database.from<PersistedPage[]>("pages").insert(
     generatedPages.map((page) => ({
       projectId,
       name: page.name,
@@ -662,6 +870,7 @@ const persistGeneratedState = async (
 
   try {
     await persistMessagePair(insforge, projectId, latestUserParts, [
+      ...(preflightText ? [{ type: "text", text: preflightText }] : []),
       {
         type: "data-generation",
         id: "gen-card",
@@ -691,6 +900,7 @@ const persistRegeneratedState = async (
   deps: RouteDeps,
   selectedPage: PersistedPage,
   nextPage: Pick<PersistedPage, "htmlContent" | "rootStyles">,
+  preflightText: string | null,
   summaryText: string
 ) => {
   const { insforge, projectId, latestUserParts } = deps
@@ -703,6 +913,7 @@ const persistRegeneratedState = async (
       p_root_styles: nextPage.rootStyles,
       p_user_parts: latestUserParts,
       p_assistant_parts: [
+        ...(preflightText ? [{ type: "text", text: preflightText }] : []),
         {
           type: "data-generation",
           id: "gen-card",
@@ -752,6 +963,7 @@ const persistRegeneratedState = async (
 
   try {
     await persistMessagePair(insforge, projectId, latestUserParts, [
+      ...(preflightText ? [{ type: "text", text: preflightText }] : []),
       {
         type: "data-generation",
         id: "gen-card",
@@ -829,7 +1041,12 @@ async function runGenerationWorker({
   latestUserMessage,
   analysis,
   existingPages,
+  contentDepth,
+  creativityLevel,
   generationMode,
+  layoutComplexity,
+  modelProvider,
+  preflightText,
   styleIntensity,
   signal,
 }: {
@@ -840,12 +1057,18 @@ async function runGenerationWorker({
   latestUserMessage: string
   analysis: AnalysisResult
   existingPages: PersistedPage[] | null
+  contentDepth: string
+  creativityLevel: string
   generationMode: string
+  layoutComplexity: string
+  modelProvider: ModelProvider
+  preflightText: string | null
   styleIntensity: string
   signal: AbortSignal
 }): Promise<{ savedPages: PersistedPage[]; summaryText: string }> {
   const { pages } = analysis;
   const createCompletion = createInsforgeCompletion(insforge)
+  const modelStrategy = getModelStrategy(modelProvider, "generate")
 
   if (!analysis || !pages || pages.length === 0) {
     throw new Error("No pages generated");
@@ -896,7 +1119,7 @@ async function runGenerationWorker({
       : "No previous pages";
 
     const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
-      model: "google/gemini-3.1-pro-preview",
+      model: modelStrategy.model,
       messages: [
         {
           role: "system",
@@ -906,7 +1129,10 @@ async function runGenerationWorker({
           role: "user",
           content: `
          GENERATE HTML FOR THE FOLLOWING PAGE:
+- Content Depth: ${contentDepth}
+- Creativity Level: ${creativityLevel}
 - Generation Mode: ${generationMode}
+- Layout Complexity: ${layoutComplexity}
 - Style Intensity: ${styleIntensity}
 - Page Name: ${page.name}
 - Page Purpose: ${page.purpose}
@@ -940,12 +1166,9 @@ ${page.rootStyles}
         }
       ],
       webSearch: { enabled: false },
-      maxTokens: 30000
+      maxTokens: GENERATION_MAX_TOKENS
     }, {
-      fallbackModels: [
-        "google/gemini-2.5-pro",
-        "google/gemini-3-flash-preview"
-      ],
+      fallbackModels: modelStrategy.fallbackModels,
       signal
     })
 
@@ -982,6 +1205,7 @@ ${page.rootStyles}
   const savedPages = await persistGeneratedState(
     { insforge, projectId, latestUserParts },
     generatedDrafts,
+    preflightText,
     fullSummaryText
   )
 
@@ -1024,7 +1248,12 @@ async function runRegenerateWorker({
   latestUserParts,
   latestUserMessage,
   analysis,
+  contentDepth,
+  creativityLevel,
   generationMode,
+  layoutComplexity,
+  modelProvider,
+  preflightText,
   styleIntensity,
   signal,
 }: {
@@ -1035,11 +1264,17 @@ async function runRegenerateWorker({
   latestUserParts: ApiMessagePart[]
   latestUserMessage: string
   analysis: AnalysisResult
+  contentDepth: string
+  creativityLevel: string
   generationMode: string
+  layoutComplexity: string
+  modelProvider: ModelProvider
+  preflightText: string | null
   styleIntensity: string
   signal: AbortSignal
 }): Promise<{ page: PersistedPage; summaryText: string }> {
   const createCompletion = createInsforgeCompletion(insforge)
+  const modelStrategy = getModelStrategy(modelProvider, "regenerate")
 
   if (!analysis || analysis.pages?.length === 0) {
     throw new Error("No pages generated");
@@ -1060,7 +1295,7 @@ async function runRegenerateWorker({
   }, { id: "gen-card" })
 
   const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
-    model: "google/gemini-3-flash-preview",
+    model: modelStrategy.model,
     messages: [
       {
         role: "system",
@@ -1072,7 +1307,10 @@ async function runRegenerateWorker({
                 You are surgically editing an existing page.
                 RULE: Return the COMPLETE page HTML with ONLY the requested change applied. Every other section, component, and element must remain exactly as it is in the Current HTML.
 
+                CONTENT DEPTH: ${contentDepth}
+                CREATIVITY LEVEL: ${creativityLevel}
                 GENERATION MODE: ${generationMode}
+                LAYOUT COMPLEXITY: ${layoutComplexity}
                 STYLE INTENSITY: ${styleIntensity}
                 EDITING: "${selectedPage.name}"
                 USER REQUEST: "${latestUserMessage}"
@@ -1082,12 +1320,9 @@ async function runRegenerateWorker({
       }
     ],
     webSearch: { enabled: false },
-    maxTokens: 28000
+    maxTokens: ANALYSIS_MAX_TOKENS
   }, {
-    fallbackModels: [
-      "google/gemini-2.5-pro",
-      "google/gemini-2.5-flash-lite"
-    ],
+    fallbackModels: modelStrategy.fallbackModels,
     signal
   });
 
@@ -1102,6 +1337,7 @@ async function runRegenerateWorker({
       htmlContent,
       rootStyles: analysis.rootStyles ?? selectedPage.rootStyles
     },
+    preflightText,
     fullSummaryText
   )
 
@@ -1139,7 +1375,7 @@ export async function POST(request: NextRequest) {
   let createdProjectId: string | null = null
   try {
     const body = await parseJsonBody(request)
-    const { messages, slugId, selectedPageId, idempotencyKey, generationMode, styleIntensity } = parseProjectPostBody(body)
+    const { messages, slugId, selectedPageId, idempotencyKey, contentDepth, creativityLevel, generationMode, layoutComplexity, modelProvider, styleIntensity } = parseProjectPostBody(body)
 
     const { user, insforge } = await getAuthServer()
     if (!user?.id) return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
@@ -1165,7 +1401,7 @@ export async function POST(request: NextRequest) {
       ])
     }
 
-    let { data: project } = await getOwnedProjectBySlug<{ id: string; title: string; slugId?: string }>(
+    let { data: project } = await getOwnedProjectBySlug<PersistedProject>(
       insforge,
       user.id,
       slugId,
@@ -1174,7 +1410,7 @@ export async function POST(request: NextRequest) {
 
     if (!project) {
       const { data: conflictingProject, error: conflictingProjectError } = await insforge.database
-        .from("projects")
+        .from<ProjectOwnershipRecord>("projects")
         .select("id, userId")
         .eq("slugId", slugId)
         .single()
@@ -1190,7 +1426,7 @@ export async function POST(request: NextRequest) {
       const provisionalTitle = "Untitled Project"
       const { data: newProject, error } = await insforge
         .database
-        .from("projects")
+        .from<PersistedProject>("projects")
         .insert([
           {
             slugId,
@@ -1204,7 +1440,7 @@ export async function POST(request: NextRequest) {
       if (error) {
         const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
         if (errorMessage.includes("duplicate") || errorMessage.includes("unique")) {
-          const { data: racedProject } = await getOwnedProjectBySlug<{ id: string; title: string }>(
+          const { data: racedProject } = await getOwnedProjectBySlug<PersistedProject>(
             insforge,
             user.id,
             slugId,
@@ -1230,7 +1466,7 @@ export async function POST(request: NextRequest) {
 
         if (generatedTitle && generatedTitle !== provisionalTitle) {
           const { data: updatedProject } = await insforge.database
-            .from("projects")
+            .from<PersistedProject>("projects")
             .update({
               title: generatedTitle
             })
@@ -1251,9 +1487,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (!project) {
+      throw new Error("Failed to resolve project")
+    }
+
     const projectId = project.id;
 
-    const { data: existingPages } = await insforge.database.from("pages")
+    const { data: existingPages } = await insforge.database.from<PersistedPage[]>("pages")
       .select("id, name, rootStyles, htmlContent")
       .eq("projectId", projectId)
       .order("createdAt", { ascending: true })
@@ -1275,7 +1515,7 @@ export async function POST(request: NextRequest) {
         }
       }))
 
-    const { data: selectedPage } = selectedPageId ? await insforge.database.from("pages")
+    const { data: selectedPage } = selectedPageId ? await insforge.database.from<PersistedPage>("pages")
       .select("id, name, rootStyles, htmlContent")
       .eq("id", selectedPageId)
       .eq("projectId", projectId)
@@ -1291,13 +1531,18 @@ export async function POST(request: NextRequest) {
     const requestHash = createRequestHash({
       slugId,
       selectedPageId,
+      contentDepth,
+      creativityLevel,
       generationMode,
+      layoutComplexity,
+      modelProvider,
       styleIntensity,
       messages
     })
     const createCompletion = createInsforgeCompletion(insforge)
+    const intentModelStrategy = getModelStrategy(modelProvider, "intent")
     const intentResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
-      model: "anthropic/claude-sonnet-4.5",
+      model: intentModelStrategy.model,
       messages: [
         {
           role: "system",
@@ -1309,15 +1554,66 @@ export async function POST(request: NextRequest) {
         }
       ]
     }, {
-      fallbackModels: ["google/gemini-2.5-pro"],
+      fallbackModels: intentModelStrategy.fallbackModels,
       signal: activeOperationSignal.signal
     })
 
     throwIfAborted(activeOperationSignal.signal)
     throwIfTimedOut(activeOperationSignal.didTimeOut())
 
-    const intent = classifyIntent(intentResult.choices[0]?.message?.content ?? "")
+    let intent = classifyIntent(intentResult.choices[0]?.message?.content ?? "")
     const clientIpHash = hashClientIp(getClientIp(request))
+
+    let preflight: PreflightResult | null = null
+
+    if (intent !== "chat") {
+      try {
+        const preflightModelStrategy = getModelStrategy(modelProvider, "analysis")
+        const preflightResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+          model: preflightModelStrategy.model,
+          messages: [
+            {
+              role: "system",
+              content: PRE_GENERATION_PREFLIGHT_PROMPT,
+            },
+            {
+              role: "user",
+              content: `
+REQUEST MODE: ${intent}
+GENERATION MODE: ${generationMode}
+CONTENT DEPTH: ${contentDepth}
+CREATIVITY LEVEL: ${creativityLevel}
+LAYOUT COMPLEXITY: ${layoutComplexity}
+STYLE INTENSITY: ${styleIntensity}
+${selectedPage ? `SELECTED PAGE: ${selectedPage.name}` : ""}
+USER REQUEST: ${latestUserMessage}
+`.trim()
+            }
+          ]
+        }, {
+          fallbackModels: preflightModelStrategy.fallbackModels,
+          signal: activeOperationSignal.signal
+        })
+
+        throwIfAborted(activeOperationSignal.signal)
+        throwIfTimedOut(activeOperationSignal.didTimeOut())
+
+        preflight = parsePreflightResult(preflightResult.choices[0]?.message?.content ?? "", {
+          latestUserMessage
+        })
+
+        if (!preflight.shouldGenerate && preflight.clarifyingQuestions.length > 0) {
+          intent = "chat"
+        }
+      } catch (error) {
+        if (error instanceof AbortError || isAbortLikeError(error)) {
+          throw error
+        }
+
+        console.log(error, "Preflight assistant failed; continuing without preflight")
+        preflight = null
+      }
+    }
 
     let requestState: Awaited<ReturnType<typeof beginGenerationRequest>> = {
       record: null,
@@ -1375,6 +1671,7 @@ export async function POST(request: NextRequest) {
           throwIfTimedOut(activeOperationSignal.didTimeOut())
 
           if (intent === "chat") {
+            const chatModelStrategy = getModelStrategy(modelProvider, "chat")
             const chatRequestState = await beginGenerationRequest(
               insforge,
               user.id,
@@ -1399,23 +1696,32 @@ export async function POST(request: NextRequest) {
               return
             }
 
-            const chatResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
-              model: "google/gemini-2.5-pro",
-              messages: [
-                {
-                  role: "system",
-                  content: SLEEK_CHAT_PROMPT
-                },
-                ...modelMessages
-              ],
-              stream: true,
-              webSearch: { enabled: false }
-            }, {
-              fallbackModels: ["anthropic/claude-sonnet-4.5"],
-              signal: activeOperationSignal.signal
-            })
+            const chatText = preflight && !preflight.shouldGenerate
+              ? preflight.assistantMessage
+              : await (async () => {
+                const chatResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
+                  model: chatModelStrategy.model,
+                  messages: [
+                    {
+                      role: "system",
+                      content: SLEEK_CHAT_PROMPT
+                    },
+                    ...modelMessages
+                  ],
+                  stream: true,
+                  webSearch: { enabled: false }
+                }, {
+                  fallbackModels: chatModelStrategy.fallbackModels,
+                  signal: activeOperationSignal.signal
+                })
 
-            const chatText = await streamTextResponse(writer, chatResult, activeOperationSignal.signal)
+                return streamTextResponse(writer, chatResult, activeOperationSignal.signal)
+              })()
+
+            if (preflight && !preflight.shouldGenerate) {
+              writeTextResponse(writer, chatText)
+            }
+
             throwIfAborted(activeOperationSignal.signal)
             throwIfTimedOut(activeOperationSignal.didTimeOut())
 
@@ -1444,9 +1750,16 @@ export async function POST(request: NextRequest) {
           }, { id: "gen-card" })
 
           genCardEmitted = true
+          const analysisModelStrategy = getModelStrategy(modelProvider, "analysis")
+          const improvedUserPrompt = preflight?.improvedPrompt?.trim() || latestUserMessage
+          const preflightText = preflight?.assistantMessage?.trim() || null
+
+          if (preflightText) {
+            writeTextResponse(writer, preflightText)
+          }
 
           const analysisResult = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
-            model: "anthropic/claude-sonnet-4.5",
+            model: analysisModelStrategy.model,
             messages: [
               {
                 role: "system",
@@ -1461,10 +1774,25 @@ export async function POST(request: NextRequest) {
                     text: `${imageParts.length > 0
                       ? "Reference image attached - extract EVERY detail: colors, layout, components, spacing. Match it precisely.\n\n"
                       : ""}
+    CONTENT DEPTH: ${contentDepth || DEFAULT_CONTENT_DEPTH}
+    CONTENT GUIDANCE:
+    ${CONTENT_DEPTH_PROMPT_GUIDANCE}
+    Match the requested degree of copy completeness across headlines, supporting text, labels, stats, testimonials, tables, and body content.
+
+    CREATIVITY LEVEL: ${creativityLevel || DEFAULT_CREATIVITY_LEVEL}
+    CREATIVITY GUIDANCE:
+    ${CREATIVITY_LEVEL_PROMPT_GUIDANCE}
+    Match the requested level of prompt adherence versus invention across layout decisions, section selection, and stylistic interpretation.
+
     GENERATION MODE: ${generationMode}
     MODE GUIDANCE:
     ${GENERATION_MODE_PROMPT_GUIDANCE}
     Build specifically for the "${generationMode}" surface type unless the user explicitly asks for a different format.
+
+    LAYOUT COMPLEXITY: ${layoutComplexity || DEFAULT_LAYOUT_COMPLEXITY}
+    LAYOUT GUIDANCE:
+    ${LAYOUT_COMPLEXITY_PROMPT_GUIDANCE}
+    Match the requested structural richness through section count, grid density, and compositional layering.
 
     STYLE INTENSITY: ${styleIntensity || DEFAULT_STYLE_INTENSITY}
     STYLE GUIDANCE:
@@ -1483,14 +1811,14 @@ export async function POST(request: NextRequest) {
         ${hasExistingPages && !isRegen
                         ? `EXISTING PAGES (do NOT recreate):\n${existingPagesList.map((page) => `- ${page.name}\n${page.rootStyles}`).join("\n")}\n\n`
                         : ""}
-        USER REQUEST: "${latestUserMessage}"OUTPUT RAW JSON ONLY.`.trim()
+        USER REQUEST: "${improvedUserPrompt}"OUTPUT RAW JSON ONLY.`.trim()
                   }
                 ]
               }
             ],
-            maxTokens: 28000,
+            maxTokens: ANALYSIS_MAX_TOKENS,
           }, {
-            fallbackModels: ["google/gemini-2.5-pro"],
+            fallbackModels: analysisModelStrategy.fallbackModels,
             signal: activeOperationSignal.signal
           });
 
@@ -1499,8 +1827,11 @@ export async function POST(request: NextRequest) {
 
           const analysisText = analysisResult.choices[0].message.content || "{}"
           const analysis = parseAnalysisResult(analysisText, {
-            latestUserMessage,
+            latestUserMessage: improvedUserPrompt,
+            contentDepth,
+            creativityLevel,
             generationMode,
+            layoutComplexity,
             styleIntensity,
             selectedPage,
             isRegen
@@ -1513,9 +1844,14 @@ export async function POST(request: NextRequest) {
               projectId,
               selectedPage,
               latestUserParts: lastMessage.parts,
-              latestUserMessage,
+              latestUserMessage: improvedUserPrompt,
               analysis,
+              contentDepth,
+              creativityLevel,
               generationMode,
+              layoutComplexity,
+              modelProvider,
+              preflightText,
               styleIntensity,
               signal: activeOperationSignal.signal,
             })
@@ -1526,6 +1862,7 @@ export async function POST(request: NextRequest) {
               {
                 kind: "regenerate",
                 page: regenerated.page,
+                preflightText: preflightText ?? undefined,
                 summaryText: regenerated.summaryText
               },
               null
@@ -1539,10 +1876,15 @@ export async function POST(request: NextRequest) {
             writer,
             projectId,
             latestUserParts: lastMessage.parts,
-            latestUserMessage,
+            latestUserMessage: improvedUserPrompt,
             analysis,
             existingPages,
+            contentDepth,
+            creativityLevel,
             generationMode,
+            layoutComplexity,
+            modelProvider,
+            preflightText,
             styleIntensity,
             signal: activeOperationSignal.signal,
           });
@@ -1550,12 +1892,13 @@ export async function POST(request: NextRequest) {
             insforge,
             generationRequestId,
             "completed",
-            {
-              kind: "generate",
-              pages: generated.savedPages,
-              summaryText: generated.summaryText
-            },
-            null
+              {
+                kind: "generate",
+                pages: generated.savedPages,
+                preflightText: preflightText ?? undefined,
+                summaryText: generated.summaryText
+              },
+              null
           )
           hasCommittedWrites = true
         } catch (error) {
@@ -1594,16 +1937,18 @@ export async function POST(request: NextRequest) {
           }
 
           console.log(error)
+          const backendUnavailableMessage = getBackendUnavailableMessage(error)
+          const aiProviderErrorMessage = getAiProviderErrorMessage(error)
 
           await finishGenerationRequest(
             insforge,
             generationRequestId,
             "failed",
             null,
-            error instanceof Error ? error.message : "Unknown generation error"
+            aiProviderErrorMessage ?? backendUnavailableMessage ?? (error instanceof Error ? error.message : "Unknown generation error")
           )
           emit(writer, "generation", { status: "error" }, { id: "gen-card" });
-          writer.write({ type: "error", errorText: "Something went wrong" })
+          writer.write({ type: "error", errorText: aiProviderErrorMessage ?? backendUnavailableMessage ?? "Something went wrong" })
         } finally {
           activeOperationSignal.cleanup()
         }
@@ -1638,6 +1983,14 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof RequestValidationError) {
       return createValidationErrorResponse(error)
+    }
+    const backendUnavailableMessage = getBackendUnavailableMessage(error)
+    const aiProviderErrorMessage = getAiProviderErrorMessage(error)
+    if (backendUnavailableMessage) {
+      return createErrorResponse(503, "BACKEND_UNAVAILABLE", backendUnavailableMessage)
+    }
+    if (aiProviderErrorMessage) {
+      return createErrorResponse(401, "AI_PROVIDER_AUTH_FAILED", aiProviderErrorMessage)
     }
     console.log(error);
     return createErrorResponse(500, "INTERNAL_SERVER_ERROR", "Internal server error");

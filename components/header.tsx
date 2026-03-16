@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { Logo } from "./logo"
 import { Button } from "./ui/button"
 import { DarkModeToggle } from "./dark-mode-toggle"
-import { SignedIn, SignedOut, SignInButton, SignUpButton, useAuth, UserButton } from "@insforge/nextjs"
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/nextjs"
 import { Spinner } from "./ui/spinner"
 import GlobalCommandPalette from "./global-command-palette"
 
@@ -49,9 +49,7 @@ const Header = () => {
 
               <SignedIn>
                 <UserButton
-                  mode="simple"
                   afterSignOutUrl="/"
-                  showProfile
                 />
               </SignedIn>
 

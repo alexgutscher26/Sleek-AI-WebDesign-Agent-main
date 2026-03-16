@@ -8,7 +8,27 @@ import {
   MIME_EXTENSIONS
 } from "@/lib/request-limits"
 import { verifyInlineFilePayload } from "@/lib/file-validation"
+import {
+  CONTENT_DEPTH_SET,
+  DEFAULT_CONTENT_DEPTH,
+  type ContentDepth
+} from "@/constants/content-depth"
+import {
+  CREATIVITY_LEVEL_SET,
+  DEFAULT_CREATIVITY_LEVEL,
+  type CreativityLevel
+} from "@/constants/creativity-level"
 import { DEFAULT_GENERATION_MODE, GENERATION_MODE_SET, type GenerationMode } from "@/constants/generation-mode"
+import {
+  DEFAULT_LAYOUT_COMPLEXITY,
+  LAYOUT_COMPLEXITY_SET,
+  type LayoutComplexity
+} from "@/constants/layout-complexity"
+import {
+  DEFAULT_MODEL_PROVIDER,
+  MODEL_PROVIDER_SET,
+  type ModelProvider
+} from "@/constants/model-provider"
 import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITY_SET, type StyleIntensity } from "@/constants/style-intensity"
 
 const SLUG_ID_PATTERN = /^[A-Za-z0-9]{6,64}$/
@@ -57,7 +77,11 @@ export type ProjectPostBody = {
   slugId: string
   selectedPageId: string | null
   idempotencyKey: string | null
+  contentDepth: ContentDepth
+  creativityLevel: CreativityLevel
   generationMode: GenerationMode
+  layoutComplexity: LayoutComplexity
+  modelProvider: ModelProvider
   styleIntensity: StyleIntensity
   messages: ApiMessage[]
 }
@@ -134,6 +158,66 @@ const validateGenerationMode = (value: unknown, field = "generationMode") => {
   }
 
   return { ok: true as const, value: value as GenerationMode }
+}
+
+const validateContentDepth = (value: unknown, field = "contentDepth") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: DEFAULT_CONTENT_DEPTH }
+  }
+
+  if (typeof value !== "string" || !CONTENT_DEPTH_SET.has(value as ContentDepth)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be one of: wireframe, realistic-copy, complete." }
+    }
+  }
+
+  return { ok: true as const, value: value as ContentDepth }
+}
+
+const validateCreativityLevel = (value: unknown, field = "creativityLevel") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: DEFAULT_CREATIVITY_LEVEL }
+  }
+
+  if (typeof value !== "string" || !CREATIVITY_LEVEL_SET.has(value as CreativityLevel)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be one of: strict, balanced, exploratory." }
+    }
+  }
+
+  return { ok: true as const, value: value as CreativityLevel }
+}
+
+const validateLayoutComplexity = (value: unknown, field = "layoutComplexity") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: DEFAULT_LAYOUT_COMPLEXITY }
+  }
+
+  if (typeof value !== "string" || !LAYOUT_COMPLEXITY_SET.has(value as LayoutComplexity)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be one of: simple, balanced, complex." }
+    }
+  }
+
+  return { ok: true as const, value: value as LayoutComplexity }
+}
+
+const validateModelProvider = (value: unknown, field = "modelProvider") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: DEFAULT_MODEL_PROVIDER }
+  }
+
+  if (typeof value !== "string" || !MODEL_PROVIDER_SET.has(value as ModelProvider)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be one of: auto, gemini, claude." }
+    }
+  }
+
+  return { ok: true as const, value: value as ModelProvider }
 }
 
 const validateStyleIntensity = (value: unknown, field = "styleIntensity") => {
@@ -393,13 +477,21 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   const slugIdResult = validateSlugId(input.slugId)
   const selectedPageIdResult = validateOptionalEntityId(input.selectedPageId, "selectedPageId")
   const idempotencyKeyResult = validateOptionalIdempotencyKey(input.idempotencyKey)
+  const contentDepthResult = validateContentDepth(input.contentDepth)
+  const creativityLevelResult = validateCreativityLevel(input.creativityLevel)
   const generationModeResult = validateGenerationMode(input.generationMode)
+  const layoutComplexityResult = validateLayoutComplexity(input.layoutComplexity)
+  const modelProviderResult = validateModelProvider(input.modelProvider)
   const styleIntensityResult = validateStyleIntensity(input.styleIntensity)
 
   if (!slugIdResult.ok) issues.push(slugIdResult.issue)
   if (!selectedPageIdResult.ok) issues.push(selectedPageIdResult.issue)
   if (!idempotencyKeyResult.ok) issues.push(idempotencyKeyResult.issue)
+  if (!contentDepthResult.ok) issues.push(contentDepthResult.issue)
+  if (!creativityLevelResult.ok) issues.push(creativityLevelResult.issue)
   if (!generationModeResult.ok) issues.push(generationModeResult.issue)
+  if (!layoutComplexityResult.ok) issues.push(layoutComplexityResult.issue)
+  if (!modelProviderResult.ok) issues.push(modelProviderResult.issue)
   if (!styleIntensityResult.ok) issues.push(styleIntensityResult.issue)
 
   if (!Array.isArray(input.messages) || input.messages.length === 0) {
@@ -496,7 +588,11 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     !slugIdResult.ok ||
     !selectedPageIdResult.ok ||
     !idempotencyKeyResult.ok ||
+    !contentDepthResult.ok ||
+    !creativityLevelResult.ok ||
     !generationModeResult.ok ||
+    !layoutComplexityResult.ok ||
+    !modelProviderResult.ok ||
     !styleIntensityResult.ok
   ) {
     throw new RequestValidationError([
@@ -508,7 +604,11 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     slugId: slugIdResult.value,
     selectedPageId: selectedPageIdResult.value,
     idempotencyKey: idempotencyKeyResult.value,
+    contentDepth: contentDepthResult.value,
+    creativityLevel: creativityLevelResult.value,
     generationMode: generationModeResult.value,
+    layoutComplexity: layoutComplexityResult.value,
+    modelProvider: modelProviderResult.value,
     styleIntensity: styleIntensityResult.value,
     messages
   }

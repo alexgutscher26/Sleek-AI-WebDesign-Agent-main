@@ -77,12 +77,12 @@
 ## P1 - AI quality improvements
 - [x] Add selectable generation modes (landing, dashboard, auth, docs, ecommerce)
 - [x] Add style intensity controls (minimal, balanced, bold)
-- [ ] Add creativity controls (strict-to-prompt <-> exploratory)
-- [ ] Add layout complexity controls
-- [ ] Add content depth controls (wireframe, realistic copy, complete)
-- [ ] Add model provider selector with cost/latency hints
-- [ ] Add prompt improvement assistant before generation
-- [ ] Add auto-clarifying questions when prompt is vague
+- [x] Add creativity controls (strict-to-prompt <-> exploratory)
+- [x] Add layout complexity controls
+- [x] Add content depth controls (wireframe, realistic copy, complete)
+- [x] Add model provider selector with cost/latency hints
+- [x] Add prompt improvement assistant before generation
+- [x] Add auto-clarifying questions when prompt is vague
 - [ ] Add structured constraints input (brand colors, spacing scale, typography)
 - [ ] Add preserve-elements lock for regenerate
 - [ ] Add section-scoped regenerate (hero, pricing, FAQ, footer)

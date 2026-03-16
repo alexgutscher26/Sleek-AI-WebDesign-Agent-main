@@ -1,16 +1,14 @@
-import { auth } from '@insforge/nextjs';
-import { createClient } from '@insforge/sdk';
-import { requireInsforgeConfig } from './insforge-config';
+import { auth } from "@clerk/nextjs/server";
+import { createCompatAiClient } from "@/lib/ai-client";
+import { createCompatDatabaseClient } from "@/lib/compat-backend";
 
 export async function getAuthServer() {
-  const { user } = await auth()
-  const config = requireInsforgeConfig("creating Insforge server client")
-
-  const insforge = createClient({
-    baseUrl: config.baseUrl,
-    anonKey: config.anonKey
-  });
+  const session = await auth()
+  const user = session.userId ? { id: session.userId } : null
+  const insforge = {
+    ai: createCompatAiClient(),
+    database: createCompatDatabaseClient()
+  }
 
   return { insforge, user }
-
 }
