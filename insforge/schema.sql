@@ -119,10 +119,10 @@ begin
   if v_project.id is not null then
     v_created := true;
   else
-    select *
+    select existing_project.*
     into v_project
-    from public.projects
-    where "slugId" = p_slug_id;
+    from public.projects as existing_project
+    where existing_project."slugId" = p_slug_id;
   end if;
 
   if v_project."userId" <> p_user_id then
@@ -131,7 +131,11 @@ begin
   end if;
 
   return query
-  select v_project.id, v_created, v_project.title, v_project."slugId";
+  select
+    v_project.id as id,
+    v_created as "wasCreated",
+    v_project.title as title,
+    v_project."slugId" as "slugId";
 end;
 $$;
 

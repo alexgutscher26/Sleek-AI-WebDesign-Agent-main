@@ -47,6 +47,8 @@ type GenerationStreamData = {
   status?: "error" | "canceled" | string;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 const fileToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result ?? ""));
@@ -100,11 +102,25 @@ const ChatInterface = ({
   } = useQuery({
     queryKey: ["project", slugId],
     queryFn: async () => {
-      const res = await fetch(`/api/project/${slugId}`);
-      if (!res.ok) {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const res = await fetch(`/api/project/${slugId}`);
+        if (res.ok) {
+          const payload = await res.json() as {
+            success: true;
+            data: { title: string; messages: UIMessage[]; pages: PageType[] }
+          }
+          return payload.data
+        }
+
         const payload = await res.json().catch(() => null) as {
           error?: { code?: string; message?: string }
         } | null;
+
+        const isRetriableNotFound = payload?.error?.code === "PROJECT_NOT_FOUND" && attempt < 3;
+        if (isRetriableNotFound) {
+          await sleep(250 * attempt);
+          continue
+        }
 
         const message = payload?.error?.code === "PROJECT_NOT_FOUND"
           ? "This project could not be found."
@@ -115,15 +131,13 @@ const ChatInterface = ({
         throw new Error(message);
       }
 
-      const payload = await res.json() as {
-        success: true;
-        data: { title: string; messages: UIMessage[]; pages: PageType[] }
-      }
-      return payload.data
+      throw new Error("Failed to fetch project.")
     },
-  enabled: isProjectPage, // Only fetch on project page
-  refetchOnWindowFocus: false, // Prevent breaking stream when switching tabs
-  staleTime: 1000 * 60 * 5, // 5 minutes cache
+    // Brand new local projects already have state in memory; fetching immediately
+    // can race the initial POST before the project row exists and produce avoidable 404s.
+    enabled: isProjectPage && Boolean(propSlugId),
+    refetchOnWindowFocus: false, // Prevent breaking stream when switching tabs
+    staleTime: 1000 * 60 * 5, // 5 minutes cache
   })
 
   const { messages, sendMessage, setMessages, status, error,

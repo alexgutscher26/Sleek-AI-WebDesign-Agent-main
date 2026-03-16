@@ -122,7 +122,7 @@ type RouteDeps = {
   latestUserParts: ApiMessagePart[]
 }
 
-const GENERATION_TIMEOUT_MS = 90_000
+const GENERATION_TIMEOUT_MS = 480_000
 
 export async function GET() {
   try {
@@ -801,6 +801,26 @@ const streamTextResponse = async (
   return fullText
 }
 
+const writeTextResponse = (writer: StreamWriter, text: string) => {
+  const textId = generateId()
+  writer.write({ type: "text-start", id: textId })
+  writer.write({ type: "text-delta", id: textId, delta: text })
+  writer.write({ type: "text-end", id: textId })
+}
+
+const buildGenerationSummaryText = (pages: AnalysisPage[]) => {
+  if (pages.length === 1) {
+    return `I've generated the ${pages[0].name} page and saved it to your project.`
+  }
+
+  const pageNames = pages.map((page) => page.name).join(", ")
+  return `I've generated ${pages.length} pages for this project: ${pageNames}.`
+}
+
+const buildRegenerationSummaryText = (pageName: string) => (
+  `I've updated the ${pageName} page and saved the latest version to your project.`
+)
+
 async function runGenerationWorker({
   insforge,
   writer,
@@ -957,34 +977,15 @@ ${page.rootStyles}
     }, { transient: true });
   }
 
-  const summaryResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
-    model: "google/gemini-2.5-flash-lite",
-    messages: [
-      {
-        role: "system",
-        content: `You are Sleek, an AI web design agent. You just finished building pages.
-Write 1-2 sentences in first person. Natural, confident. No questions. No "let me know".`
-      },
-      {
-        role: "user",
-        content: `Designed: ${pages.map((page) => page.name).join(", ")} for: "${latestUserMessage}". Summarize briefly.`
-      }
-    ],
-    stream: true,
-    webSearch: { enabled: false }
-  }, {
-    fallbackModels: ["google/gemini-2.5-pro"],
-    signal
-  })
-
-  const fullSummaryText = await streamTextResponse(writer, summaryResult, signal)
-  throwIfAborted(signal)
+  const fullSummaryText = buildGenerationSummaryText(pages)
 
   const savedPages = await persistGeneratedState(
     { insforge, projectId, latestUserParts },
     generatedDrafts,
     fullSummaryText
   )
+
+  writeTextResponse(writer, fullSummaryText)
 
   emit(writer, "generation", {
     status: "complete",
@@ -1092,28 +1093,7 @@ async function runRegenerateWorker({
 
   const htmlContent = prepareGeneratedHtml(result.choices[0]?.message?.content ?? "");
 
-  const summaryResult = await createChatCompletionWithRetries<StreamingCompletionResponse>(createCompletion, {
-    model: "google/gemini-2.5-flash-lite",
-    messages: [
-      {
-        role: "system",
-        content: `You are Sleek, an AI web design agent. You just finished building pages.
-Write 1-2 sentences in first person. Natural, confident. No questions. No "let me know".`
-      },
-      {
-        role: "user",
-        content: `Updated: ${selectedPage.name} for: "${latestUserMessage}". Summarize briefly.`
-      }
-    ],
-    stream: true,
-    webSearch: { enabled: false }
-  }, {
-    fallbackModels: ["google/gemini-2.5-pro"],
-    signal
-  })
-
-  const fullSummaryText = await streamTextResponse(writer, summaryResult, signal)
-  throwIfAborted(signal)
+  const fullSummaryText = buildRegenerationSummaryText(selectedPage.name)
 
   const updatedPage = await persistRegeneratedState(
     { insforge, projectId, latestUserParts },
@@ -1124,6 +1104,8 @@ Write 1-2 sentences in first person. Natural, confident. No questions. No "let m
     },
     fullSummaryText
   )
+
+  writeTextResponse(writer, fullSummaryText)
 
   emit(writer, "page-created", {
     persisted: true,
@@ -1154,6 +1136,7 @@ Write 1-2 sentences in first person. Natural, confident. No questions. No "let m
 export async function POST(request: NextRequest) {
   const { signal } = request;
   let operationSignal: ReturnType<typeof createOperationSignal> | null = null
+  let createdProjectId: string | null = null
   try {
     const body = await parseJsonBody(request)
     const { messages, slugId, selectedPageId, idempotencyKey, generationMode, styleIntensity } = parseProjectPostBody(body)
@@ -1189,8 +1172,6 @@ export async function POST(request: NextRequest) {
       "id, title"
     );
 
-    let createdProjectId: string | null = null
-
     if (!project) {
       const { data: conflictingProject, error: conflictingProjectError } = await insforge.database
         .from("projects")
@@ -1206,55 +1187,66 @@ export async function POST(request: NextRequest) {
         return createErrorResponse(404, "PROJECT_NOT_FOUND", "Project not found")
       }
 
-      const title = await generateProjectTitle(latestUserMessage, insforge);
-      const atomicProjectResult = await getOrCreateProjectAtomic(
-        insforge,
-        user.id,
-        slugId,
-        title
-      )
+      const provisionalTitle = "Untitled Project"
+      const { data: newProject, error } = await insforge
+        .database
+        .from("projects")
+        .insert([
+          {
+            slugId,
+            title: provisionalTitle,
+            userId: user.id
+          }
+        ])
+        .select("id, title")
+        .single()
 
-      if (atomicProjectResult.project) {
-        project = atomicProjectResult.project
-        if (atomicProjectResult.wasCreated) {
-          createdProjectId = atomicProjectResult.project.id
-        }
-      } else {
-        const { data: newProject, error } = await insforge
-          .database
-          .from("projects")
-          .insert([
-            {
-              slugId,
-              title,
-              userId: user.id
-            }
-          ])
-          .select("id, title")
-          .single()
+      if (error) {
+        const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+        if (errorMessage.includes("duplicate") || errorMessage.includes("unique")) {
+          const { data: racedProject } = await getOwnedProjectBySlug<{ id: string; title: string }>(
+            insforge,
+            user.id,
+            slugId,
+            "id, title"
+          )
 
-        if (error) {
-          const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
-          if (errorMessage.includes("duplicate") || errorMessage.includes("unique")) {
-            const { data: racedProject } = await getOwnedProjectBySlug<{ id: string; title: string }>(
-              insforge,
-              user.id,
-              slugId,
-              "id, title"
-            )
-
-            if (!racedProject) {
-              throw error
-            }
-
-            project = racedProject
-          } else {
+          if (!racedProject) {
             throw error
           }
+
+          project = racedProject
         } else {
-          if (!newProject) throw new Error("Failed to create project");
-          project = newProject
-          createdProjectId = newProject.id
+          throw error
+        }
+      } else {
+        if (!newProject) throw new Error("Failed to create project");
+        project = newProject
+        createdProjectId = newProject.id
+      }
+
+      if (createdProjectId) {
+        const generatedTitle = await generateProjectTitle(latestUserMessage, insforge)
+
+        if (generatedTitle && generatedTitle !== provisionalTitle) {
+          const { data: updatedProject } = await insforge.database
+            .from("projects")
+            .update({
+              title: generatedTitle
+            })
+            .eq("id", createdProjectId)
+            .eq("userId", user.id)
+            .select("id, title")
+            .single()
+
+          if (updatedProject) {
+            project = updatedProject
+          } else {
+            project = {
+              ...project,
+              title: generatedTitle
+            }
+          }
         }
       }
     }
@@ -1294,7 +1286,8 @@ export async function POST(request: NextRequest) {
       return createErrorResponse(404, "PAGE_NOT_FOUND", "Page not found")
     }
 
-    operationSignal = createOperationSignal(signal, GENERATION_TIMEOUT_MS)
+    const activeOperationSignal = createOperationSignal(signal, GENERATION_TIMEOUT_MS)
+    operationSignal = activeOperationSignal
     const requestHash = createRequestHash({
       slugId,
       selectedPageId,
@@ -1317,11 +1310,11 @@ export async function POST(request: NextRequest) {
       ]
     }, {
       fallbackModels: ["google/gemini-2.5-pro"],
-      signal: operationSignal.signal
+      signal: activeOperationSignal.signal
     })
 
-    throwIfAborted(operationSignal.signal)
-    throwIfTimedOut(operationSignal.didTimeOut())
+    throwIfAborted(activeOperationSignal.signal)
+    throwIfTimedOut(activeOperationSignal.didTimeOut())
 
     const intent = classifyIntent(intentResult.choices[0]?.message?.content ?? "")
     const clientIpHash = hashClientIp(getClientIp(request))
@@ -1344,7 +1337,7 @@ export async function POST(request: NextRequest) {
       )
 
       if (requestState.record && !requestState.record.wasCreated && requestState.record.status === "in_progress") {
-        operationSignal.cleanup()
+        activeOperationSignal.cleanup()
         return createErrorResponse(409, "GENERATION_ALREADY_IN_PROGRESS", "This request is already being processed.")
       }
     }
@@ -1378,8 +1371,8 @@ export async function POST(request: NextRequest) {
             title: project.title
           }, { id: "proj-title", transient: true })
 
-          throwIfAborted(operationSignal.signal)
-          throwIfTimedOut(operationSignal.didTimeOut())
+          throwIfAborted(activeOperationSignal.signal)
+          throwIfTimedOut(activeOperationSignal.didTimeOut())
 
           if (intent === "chat") {
             const chatRequestState = await beginGenerationRequest(
@@ -1419,12 +1412,12 @@ export async function POST(request: NextRequest) {
               webSearch: { enabled: false }
             }, {
               fallbackModels: ["anthropic/claude-sonnet-4.5"],
-              signal: operationSignal.signal
+              signal: activeOperationSignal.signal
             })
 
-            const chatText = await streamTextResponse(writer, chatResult, operationSignal.signal)
-            throwIfAborted(operationSignal.signal)
-            throwIfTimedOut(operationSignal.didTimeOut())
+            const chatText = await streamTextResponse(writer, chatResult, activeOperationSignal.signal)
+            throwIfAborted(activeOperationSignal.signal)
+            throwIfTimedOut(activeOperationSignal.didTimeOut())
 
             await persistMessagePair(insforge, projectId, lastMessage.parts, [
               { type: "text", text: chatText }
@@ -1498,11 +1491,11 @@ export async function POST(request: NextRequest) {
             maxTokens: 28000,
           }, {
             fallbackModels: ["google/gemini-2.5-pro"],
-            signal: operationSignal.signal
+            signal: activeOperationSignal.signal
           });
 
-          throwIfAborted(operationSignal.signal)
-          throwIfTimedOut(operationSignal.didTimeOut())
+          throwIfAborted(activeOperationSignal.signal)
+          throwIfTimedOut(activeOperationSignal.didTimeOut())
 
           const analysisText = analysisResult.choices[0].message.content || "{}"
           const analysis = parseAnalysisResult(analysisText, {
@@ -1524,7 +1517,7 @@ export async function POST(request: NextRequest) {
               analysis,
               generationMode,
               styleIntensity,
-              signal: operationSignal.signal,
+              signal: activeOperationSignal.signal,
             })
             await finishGenerationRequest(
               insforge,
@@ -1551,7 +1544,7 @@ export async function POST(request: NextRequest) {
             existingPages,
             generationMode,
             styleIntensity,
-            signal: operationSignal.signal,
+            signal: activeOperationSignal.signal,
           });
           await finishGenerationRequest(
             insforge,
@@ -1566,13 +1559,11 @@ export async function POST(request: NextRequest) {
           )
           hasCommittedWrites = true
         } catch (error) {
-          console.log(error)
-
           if (createdProjectId && !hasCommittedWrites) {
             await safeDeleteProject(insforge, createdProjectId)
           }
 
-          if (error instanceof GenerationTimeoutError || operationSignal.didTimeOut()) {
+          if (error instanceof GenerationTimeoutError || activeOperationSignal.didTimeOut()) {
             await finishGenerationRequest(
               insforge,
               generationRequestId,
@@ -1602,6 +1593,8 @@ export async function POST(request: NextRequest) {
             return
           }
 
+          console.log(error)
+
           await finishGenerationRequest(
             insforge,
             generationRequestId,
@@ -1612,7 +1605,7 @@ export async function POST(request: NextRequest) {
           emit(writer, "generation", { status: "error" }, { id: "gen-card" });
           writer.write({ type: "error", errorText: "Something went wrong" })
         } finally {
-          operationSignal.cleanup()
+          activeOperationSignal.cleanup()
         }
       }
     })
@@ -1623,6 +1616,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     operationSignal?.cleanup()
+    if (error instanceof AbortError || isAbortLikeError(error)) {
+      return new Response(null, { status: 499 })
+    }
     if (error instanceof RateLimitError) {
       return Response.json(
         {

@@ -102,7 +102,9 @@ const GlobalCommandPalette = () => {
 
       return payload.data;
     },
-    enabled: Boolean(currentProjectSlug),
+    // Only fetch the active project when the palette is open to avoid
+    // noisy background 404s while a brand-new project is still being created.
+    enabled: open && Boolean(currentProjectSlug),
     staleTime: 1000 * 60 * 3,
   });
 
