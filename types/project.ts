@@ -2,6 +2,7 @@ export type ProjectEngineSettings = {
   contentDepth: string;
   creativityLevel: string;
   generationMode: string;
+  generationPlatform?: string;
   layoutComplexity: string;
   modelProvider: string;
   styleIntensity: string;

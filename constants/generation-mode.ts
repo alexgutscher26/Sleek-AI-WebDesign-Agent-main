@@ -23,6 +23,11 @@ export const GENERATION_MODES = [
     value: "ecommerce",
     label: "Ecommerce",
     description: "Storefronts, catalog layouts, PDPs, and commerce-first surfaces."
+  },
+  {
+    value: "mobile-app",
+    label: "Mobile App",
+    description: "Native-style mobile app screens, flows, and component systems for handheld products."
   }
 ] as const;
 

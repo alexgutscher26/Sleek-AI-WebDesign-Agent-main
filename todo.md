@@ -140,8 +140,8 @@
 ## P2 - Mobile App Design Engine (major epic)
 
 ### Mobile generation core
-- [ ] Add `mobile-app` generation mode
-- [ ] Add platform selector: iOS, Android, both
+- [x] Add `mobile-app` generation mode
+- [x] Add platform selector: iOS, Android, both
 - [ ] Add design system selector: Cupertino, Material, custom hybrid
 - [ ] Add mobile-first prompt schema (app type, audience, flows)
 - [ ] Add screen map planner (onboarding -> auth -> home -> detail -> settings)

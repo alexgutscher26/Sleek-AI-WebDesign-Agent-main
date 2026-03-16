@@ -12,6 +12,7 @@ import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from '@/lib/request-limits';
 import { toast } from 'sonner';
 import { CONTENT_DEPTHS, DEFAULT_CONTENT_DEPTH, type ContentDepth } from '@/constants/content-depth';
 import { CREATIVITY_LEVELS, DEFAULT_CREATIVITY_LEVEL, type CreativityLevel } from '@/constants/creativity-level';
+import { DEFAULT_GENERATION_PLATFORM, GENERATION_PLATFORMS, type GenerationPlatform } from '@/constants/generation-platform';
 import { DEFAULT_GENERATION_MODE, GENERATION_MODES, type GenerationMode } from '@/constants/generation-mode';
 import { DEFAULT_LAYOUT_COMPLEXITY, LAYOUT_COMPLEXITIES, type LayoutComplexity } from '@/constants/layout-complexity';
 import { DEFAULT_MODEL_PROVIDER, MODEL_PROVIDERS, type ModelProvider } from '@/constants/model-provider';
@@ -21,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 type ChatInputProps = {
   contentDepth: ContentDepth;
   creativityLevel: CreativityLevel;
+  generationPlatform: GenerationPlatform;
   generationMode: GenerationMode;
   layoutComplexity: LayoutComplexity;
   modelProvider: ModelProvider;
@@ -31,6 +33,7 @@ type ChatInputProps = {
   selectedPage?: PageType;
   setContentDepth: (depth: ContentDepth) => void;
   setCreativityLevel: (level: CreativityLevel) => void;
+  setGenerationPlatform: (platform: GenerationPlatform) => void;
   setGenerationMode: (mode: GenerationMode) => void;
   setLayoutComplexity: (complexity: LayoutComplexity) => void;
   setModelProvider: (provider: ModelProvider) => void;
@@ -44,6 +47,7 @@ type ChatInputProps = {
 const ChatInput = ({
   contentDepth,
   creativityLevel,
+  generationPlatform,
   generationMode,
   layoutComplexity,
   modelProvider,
@@ -54,6 +58,7 @@ const ChatInput = ({
   selectedPage,
   setContentDepth,
   setCreativityLevel,
+  setGenerationPlatform,
   setGenerationMode,
   setLayoutComplexity,
   setModelProvider,
@@ -67,6 +72,7 @@ const ChatInput = ({
   const [showAuthBanner, setShowAuthBanner] = useState(false)
   const selectedContentDepth = CONTENT_DEPTHS.find((level) => level.value === contentDepth)
   const selectedCreativity = CREATIVITY_LEVELS.find((level) => level.value === creativityLevel)
+  const selectedPlatform = GENERATION_PLATFORMS.find((platform) => platform.value === generationPlatform)
   const selectedMode = GENERATION_MODES.find((mode) => mode.value === generationMode)
   const selectedLayoutComplexity = LAYOUT_COMPLEXITIES.find((level) => level.value === layoutComplexity)
   const selectedProvider = MODEL_PROVIDERS.find((provider) => provider.value === modelProvider)
@@ -82,6 +88,7 @@ const ChatInput = ({
     onSubmit(message, {
       contentDepth,
       creativityLevel,
+      generationPlatform,
       generationMode,
       layoutComplexity,
       modelProvider,
@@ -247,6 +254,30 @@ const ChatInput = ({
                       <span>{mode.label}</span>
                       <span className='text-[11px] text-muted-foreground'>
                         {mode.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={generationPlatform}
+              onValueChange={(value) => setGenerationPlatform(value as GenerationPlatform)}
+              disabled={generationMode !== "mobile-app"}
+            >
+              <SelectTrigger className='h-8 min-w-36 max-w-44 rounded-full border-border/70 bg-muted/30 text-xs disabled:opacity-50'>
+                <SelectValue placeholder={DEFAULT_GENERATION_PLATFORM}>
+                  {selectedPlatform?.label ?? DEFAULT_GENERATION_PLATFORM}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {GENERATION_PLATFORMS.map((platform) => (
+                  <SelectItem key={platform.value} value={platform.value}>
+                    <div className='flex flex-col'>
+                      <span>{platform.label}</span>
+                      <span className='text-[11px] text-muted-foreground'>
+                        {platform.description}
                       </span>
                     </div>
                   </SelectItem>

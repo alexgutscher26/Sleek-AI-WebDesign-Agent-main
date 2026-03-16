@@ -5,6 +5,7 @@ import { createUIMessageStream, createUIMessageStreamResponse, generateId, UIMes
 import {
   CONTENT_DEPTH_PROMPT_GUIDANCE,
   CREATIVITY_LEVEL_PROMPT_GUIDANCE,
+  GENERATION_PLATFORM_PROMPT_GUIDANCE,
   GENERATION_MODE_PROMPT_GUIDANCE,
   LAYOUT_COMPLEXITY_PROMPT_GUIDANCE,
   PRE_GENERATION_PREFLIGHT_PROMPT,
@@ -25,6 +26,7 @@ import { getOwnedProjectBySlug } from "@/lib/project-access";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response";
 import { DEFAULT_CONTENT_DEPTH } from "@/constants/content-depth";
 import { DEFAULT_CREATIVITY_LEVEL } from "@/constants/creativity-level";
+import { DEFAULT_GENERATION_PLATFORM, type GenerationPlatform } from "@/constants/generation-platform";
 import { DEFAULT_LAYOUT_COMPLEXITY } from "@/constants/layout-complexity";
 import { type ModelProvider } from "@/constants/model-provider";
 import { DEFAULT_STYLE_INTENSITY } from "@/constants/style-intensity";
@@ -206,6 +208,7 @@ const buildProjectMetadata = (settings: {
   contentDepth: string
   creativityLevel: string
   generationMode: string
+  generationPlatform: string
   layoutComplexity: string
   modelProvider: string
   styleIntensity: string
@@ -214,17 +217,31 @@ const buildProjectMetadata = (settings: {
     contentDepth: settings.contentDepth,
     creativityLevel: settings.creativityLevel,
     generationMode: settings.generationMode,
+    generationPlatform: settings.generationPlatform,
     layoutComplexity: settings.layoutComplexity,
     modelProvider: settings.modelProvider,
     styleIntensity: settings.styleIntensity
   }
 })
 
-const DEFAULT_PAGE_VIEWPORTS: NonNullable<PageMetadata["viewports"]> = [
+const DEFAULT_WEB_VIEWPORTS: NonNullable<PageMetadata["viewports"]> = [
   { id: "mobile", label: "Mobile", width: 390, height: 844 },
   { id: "tablet", label: "Tablet", width: 834, height: 1112 },
   { id: "desktop", label: "Desktop", width: 1440, height: 1024 }
 ]
+
+const MOBILE_APP_VIEWPORTS: Record<GenerationPlatform, NonNullable<PageMetadata["viewports"]>> = {
+  both: [
+    { id: "ios", label: "iOS", width: 390, height: 844 },
+    { id: "android", label: "Android", width: 412, height: 915 }
+  ],
+  ios: [
+    { id: "ios", label: "iOS", width: 390, height: 844 }
+  ],
+  android: [
+    { id: "android", label: "Android", width: 412, height: 915 }
+  ]
+}
 
 const normalizeTag = (value: string) => (
   value
@@ -238,6 +255,7 @@ const buildPageMetadata = (
   page: Pick<AnalysisPage, "name" | "purpose" | "visualDescription">,
   options: {
     generationMode: string
+    generationPlatform: GenerationPlatform
     selectedPageName?: string
   }
 ): PageMetadata => {
@@ -254,7 +272,9 @@ const buildPageMetadata = (
 
   return {
     tags,
-    viewports: DEFAULT_PAGE_VIEWPORTS
+    viewports: options.generationMode === "mobile-app"
+      ? MOBILE_APP_VIEWPORTS[options.generationPlatform]
+      : DEFAULT_WEB_VIEWPORTS
   }
 }
 
@@ -553,6 +573,7 @@ const parseAnalysisResult = (
     contentDepth: string
     creativityLevel: string
     generationMode: string
+    generationPlatform: string
     layoutComplexity: string
     styleIntensity: string
     selectedPage?: PersistedPage | null
@@ -598,7 +619,7 @@ const parseAnalysisResult = (
           id: generateId(),
           name: "Home",
           purpose: `${options.generationMode} experience`,
-          visualDescription: `${options.latestUserMessage}\nContent depth: ${options.contentDepth}\nCreativity level: ${options.creativityLevel}\nLayout complexity: ${options.layoutComplexity}\nStyle intensity: ${options.styleIntensity}`,
+          visualDescription: `${options.latestUserMessage}\nTarget platform: ${options.generationPlatform}\nContent depth: ${options.contentDepth}\nCreativity level: ${options.creativityLevel}\nLayout complexity: ${options.layoutComplexity}\nStyle intensity: ${options.styleIntensity}`,
           rootStyles: ""
         }
       ]
@@ -623,20 +644,20 @@ const safeDeleteProject = async (insforge: RouteInsforge, projectId: string) => 
 }
 
 const isMissingRpcError = (error: unknown) => {
-  if (!(error instanceof Error)) {
+  if (!error || typeof error !== "object") {
     return false
   }
 
-  const message = error.message.toLowerCase()
+  const message = String((error as { message?: string }).message ?? "").toLowerCase()
   return message.includes("could not find the function") || message.includes("function") && message.includes("does not exist")
 }
 
 const isLegacyGenerationRequestSchemaError = (error: unknown) => {
-  if (!(error instanceof Error)) {
+  if (!error || typeof error !== "object") {
     return false
   }
 
-  const message = error.message.toLowerCase()
+  const message = String((error as { message?: string }).message ?? "").toLowerCase()
   return (
     message.includes(`column "iphash" does not exist`) ||
     message.includes(`could not find the function public.begin_generation_request`) ||
@@ -646,11 +667,11 @@ const isLegacyGenerationRequestSchemaError = (error: unknown) => {
 }
 
 const isMissingGenerationRunsSchemaError = (error: unknown) => {
-  if (!(error instanceof Error)) {
+  if (!error || typeof error !== "object") {
     return false
   }
 
-  const message = error.message.toLowerCase()
+  const message = String((error as { message?: string }).message ?? "").toLowerCase()
   return (
     message.includes(`relation "generation_runs" does not exist`) ||
     message.includes(`column "latencyms" does not exist`) ||
@@ -953,7 +974,7 @@ const beginGenerationRequest = async (
         supported: true
       }
     } catch (fallbackError) {
-      if (!isMissingRpcError(fallbackError)) {
+      if (!isMissingRpcError(fallbackError) && !isLegacyGenerationRequestSchemaError(fallbackError)) {
         throw fallbackError
       }
 
@@ -1426,6 +1447,7 @@ async function runGenerationWorker({
   contentDepth,
   creativityLevel,
   generationMode,
+  generationPlatform,
   layoutComplexity,
   modelProvider,
   preflightText,
@@ -1444,6 +1466,7 @@ async function runGenerationWorker({
   contentDepth: string
   creativityLevel: string
   generationMode: string
+  generationPlatform: GenerationPlatform
   layoutComplexity: string
   modelProvider: ModelProvider
   preflightText: string | null
@@ -1487,7 +1510,7 @@ async function runGenerationWorker({
       name: page.name,
       rootStyles: page.rootStyles,
       htmlContent: "",
-      metadata: buildPageMetadata(page, { generationMode }),
+      metadata: buildPageMetadata(page, { generationMode, generationPlatform }),
       isLoading: true
     }))
   }, { transient: true });
@@ -1531,6 +1554,7 @@ async function runGenerationWorker({
 - Content Depth: ${contentDepth}
 - Creativity Level: ${creativityLevel}
 - Generation Mode: ${generationMode}
+- Target Platform: ${generationMode === "mobile-app" ? generationPlatform : DEFAULT_GENERATION_PLATFORM}
 - Layout Complexity: ${layoutComplexity}
 - Style Intensity: ${styleIntensity}
 - Page Name: ${page.name}
@@ -1544,7 +1568,7 @@ ${page.rootStyles}
     1. STYLE PRIORITY: Follow the "Visual Description" above as the ultimate source of truth.
     2. OUTPUT FORMAT: Generate ONLY raw HTML markup. Start exactly with <div. Do not include \`\`\`html or any markdown wrappers.
     CRITICAL:
-        1. Generate ONLY raw HTML markup production-ready responsive web page using Tailwind CSS for layout spacing, typography, shadows, etc.
+        1. Generate ONLY raw HTML markup for a production-ready ${generationMode === "mobile-app" ? "mobile app screen" : "responsive web page"} using Tailwind CSS for layout spacing, typography, shadows, etc.
         2. **All content must be inside a single root <div> that controls the layout.**
             - No overflow classes on the root.
             - All scrollable content must be in inner containers with hidden scrollbars: [&::-webkit-scrollbar]:hidden scrollbar-none
@@ -1561,6 +1585,12 @@ ${page.rootStyles}
         8. **Hardcode a style only if a theme variable is not needed for that element.**
         9. **Ensure iframe-friendly rendering:**
             - All elements must contribute to the final scrollHeight so your parent iframe can correctly resize.
+        10. **If Generation Mode is mobile-app:**
+            - Output the actual app screen UI only.
+            - Do NOT render a centered phone mockup, device frame, or handset floating inside whitespace.
+            - Do NOT wrap the app inside a marketing site, hero section, desktop shell, or browser-like page.
+            - The root should behave like the mobile screen itself, with full-bleed app composition and mobile-native spacing.
+            - Avoid max-w-6xl, max-w-7xl, giant centered containers, and desktop navigation patterns.
         Generate the complete, production-ready HTML for "${page.name}" now:`.trim(),
         }
       ],
@@ -1578,7 +1608,7 @@ ${page.rootStyles}
       name: page.name,
       rootStyles: page.rootStyles,
       htmlContent,
-      metadata: buildPageMetadata(page, { generationMode })
+      metadata: buildPageMetadata(page, { generationMode, generationPlatform })
     }
 
     generatedDrafts.push(draft)
@@ -1655,6 +1685,7 @@ async function runRegenerateWorker({
   contentDepth,
   creativityLevel,
   generationMode,
+  generationPlatform,
   layoutComplexity,
   modelProvider,
   preflightText,
@@ -1673,6 +1704,7 @@ async function runRegenerateWorker({
   contentDepth: string
   creativityLevel: string
   generationMode: string
+  generationPlatform: GenerationPlatform
   layoutComplexity: string
   modelProvider: ModelProvider
   preflightText: string | null
@@ -1731,12 +1763,14 @@ async function runRegenerateWorker({
                 CONTENT DEPTH: ${contentDepth}
                 CREATIVITY LEVEL: ${creativityLevel}
                 GENERATION MODE: ${generationMode}
+                TARGET PLATFORM: ${generationMode === "mobile-app" ? generationPlatform : DEFAULT_GENERATION_PLATFORM}
                 LAYOUT COMPLEXITY: ${layoutComplexity}
                 STYLE INTENSITY: ${styleIntensity}
                 EDITING: "${selectedPage.name}"
                 USER REQUEST: "${latestUserMessage}"
                 CHANGE ONLY: ${analysis.pages[0].visualDescription}
                 Current HTML: ${selectedPage.htmlContent}
+                If Generation Mode is mobile-app, keep this as the actual mobile app screen only. Do not turn it into a website or a centered phone mockup.
                 Return the full page HTML with only the requested change. Start with <div.`.trim()
       }
     ],
@@ -1804,11 +1838,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await parseJsonBody(request)
-    const { messages, slugId, selectedPageId, idempotencyKey, contentDepth, creativityLevel, generationMode, layoutComplexity, modelProvider, styleIntensity } = parseProjectPostBody(body)
+    const { messages, slugId, selectedPageId, idempotencyKey, contentDepth, creativityLevel, generationMode, generationPlatform, layoutComplexity, modelProvider, styleIntensity } = parseProjectPostBody(body)
     const projectMetadata = buildProjectMetadata({
       contentDepth,
       creativityLevel,
       generationMode,
+      generationPlatform,
       layoutComplexity,
       modelProvider,
       styleIntensity
@@ -1989,6 +2024,7 @@ export async function POST(request: NextRequest) {
       contentDepth,
       creativityLevel,
       generationMode,
+      generationPlatform,
       layoutComplexity,
       modelProvider,
       styleIntensity,
@@ -2287,6 +2323,13 @@ USER REQUEST: ${latestUserMessage}
     ${GENERATION_MODE_PROMPT_GUIDANCE}
     Build specifically for the "${generationMode}" surface type unless the user explicitly asks for a different format.
 
+    TARGET PLATFORM: ${generationMode === "mobile-app" ? generationPlatform : DEFAULT_GENERATION_PLATFORM}
+    PLATFORM GUIDANCE:
+    ${GENERATION_PLATFORM_PROMPT_GUIDANCE}
+    ${generationMode === "mobile-app"
+      ? `Optimize specifically for the "${generationPlatform}" mobile platform target.`
+      : "Treat platform as informational only unless the user explicitly asks for a mobile app surface."}
+
     LAYOUT COMPLEXITY: ${layoutComplexity || DEFAULT_LAYOUT_COMPLEXITY}
     LAYOUT GUIDANCE:
     ${LAYOUT_COMPLEXITY_PROMPT_GUIDANCE}
@@ -2329,6 +2372,7 @@ USER REQUEST: ${latestUserMessage}
             contentDepth,
             creativityLevel,
             generationMode,
+            generationPlatform,
             layoutComplexity,
             styleIntensity,
             selectedPage,
@@ -2349,6 +2393,7 @@ USER REQUEST: ${latestUserMessage}
               contentDepth,
               creativityLevel,
               generationMode,
+              generationPlatform,
               layoutComplexity,
               modelProvider,
               preflightText,
@@ -2385,6 +2430,7 @@ USER REQUEST: ${latestUserMessage}
             contentDepth,
             creativityLevel,
             generationMode,
+            generationPlatform,
             layoutComplexity,
             modelProvider,
             preflightText,

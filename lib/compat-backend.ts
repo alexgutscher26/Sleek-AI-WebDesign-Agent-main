@@ -51,6 +51,19 @@ const RPC_PARAM_ORDER: Record<string, string[]> = {
   ]
 }
 
+const RPC_PARAM_CASTS: Record<string, string[]> = {
+  get_or_create_project: ["text", "text", "text"],
+  begin_generation_request: ["text", "uuid", "uuid", "text", "text", "text", "text"],
+  finish_generation_request: ["text", "uuid", "text", "jsonb", "text"],
+  commit_message_pair: ["text", "uuid", "jsonb", "jsonb"],
+  touch_project: ["text", "uuid"],
+  sync_project_metadata: ["text", "uuid", "jsonb"],
+  rebalance_page_positions: ["text", "uuid"],
+  update_page_positions: ["text", "uuid", "jsonb"],
+  commit_generation_result: ["text", "uuid", "jsonb", "jsonb", "jsonb"],
+  commit_regeneration_result: ["text", "uuid", "uuid", "text", "text", "jsonb", "jsonb"]
+}
+
 function quoteIdentifier(identifier: string) {
   return `"${identifier.replace(/"/g, "\"\"")}"`
 }
@@ -90,6 +103,30 @@ function mapDbError(error: unknown) {
   return {
     message: "Database error"
   }
+}
+
+function isMissingFunctionError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false
+  }
+
+  const typedError = error as { code?: string; message?: string }
+  const message = typedError.message?.toLowerCase() ?? ""
+
+  return (
+    typedError.code === "42883" ||
+    message.includes("does not exist") ||
+    message.includes("could not find the function")
+  )
+}
+
+function buildRpcPlaceholders(name: string, count: number) {
+  const casts = RPC_PARAM_CASTS[name] ?? []
+
+  return Array.from({ length: count }, (_, index) => {
+    const cast = casts[index]
+    return cast ? `$${index + 1}::${cast}` : `$${index + 1}`
+  }).join(", ")
 }
 
 type SqlParameterList = Parameters<ReturnType<typeof getSql>["unsafe"]>[1]
@@ -262,7 +299,7 @@ export function createCompatDatabaseClient() {
       const sql = getSql()
       const orderedKeys = RPC_PARAM_ORDER[name] ?? Object.keys(params)
       const orderedParams = orderedKeys.map((key) => (key in params ? params[key] : null))
-      const placeholders = orderedParams.map((_, index) => `$${index + 1}`).join(", ")
+      const placeholders = buildRpcPlaceholders(name, orderedParams.length)
       const query = VOID_RPCS.has(name)
         ? `select public.${name}(${placeholders}) as result`
         : `select * from public.${name}(${placeholders})`
@@ -274,6 +311,29 @@ export function createCompatDatabaseClient() {
           error: null
         }
       } catch (error) {
+        if (name === "begin_generation_request" && orderedKeys.at(-1) === "p_ip_hash" && isMissingFunctionError(error)) {
+          const legacyKeys = orderedKeys.slice(0, -1)
+          const legacyParams = legacyKeys.map((key) => (key in params ? params[key] : null))
+          const legacyPlaceholders = buildRpcPlaceholders(name, legacyParams.length)
+
+          try {
+            const legacyRows = await sql.unsafe(
+              `select * from public.${name}(${legacyPlaceholders})`,
+              legacyParams as SqlParameterList
+            )
+
+            return {
+              data: legacyRows as TData,
+              error: null
+            }
+          } catch (legacyError) {
+            return {
+              data: null,
+              error: mapDbError(legacyError)
+            }
+          }
+        }
+
         return {
           data: null,
           error: mapDbError(error)

@@ -17,6 +17,7 @@ import { useCanvas } from "@/hooks/use-canvas";
 import { ErrorState } from "../ui/view-state";
 import { DEFAULT_CONTENT_DEPTH, type ContentDepth } from "@/constants/content-depth";
 import { DEFAULT_CREATIVITY_LEVEL, type CreativityLevel } from "@/constants/creativity-level";
+import { DEFAULT_GENERATION_PLATFORM, type GenerationPlatform } from "@/constants/generation-platform";
 import { DEFAULT_GENERATION_MODE, type GenerationMode } from "@/constants/generation-mode";
 import { DEFAULT_LAYOUT_COMPLEXITY, type LayoutComplexity } from "@/constants/layout-complexity";
 import { DEFAULT_MODEL_PROVIDER, type ModelProvider } from "@/constants/model-provider";
@@ -37,6 +38,7 @@ type StreamPage = {
   id: string;
   name: string;
   rootStyles: string;
+  metadata?: PageType["metadata"];
 }
 
 type StreamPageCreated = {
@@ -44,6 +46,7 @@ type StreamPageCreated = {
   name: string;
   rootStyles: string;
   htmlContent: string;
+  metadata?: PageType["metadata"];
   error?: string;
   isTemporary?: boolean;
 }
@@ -77,18 +80,42 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const PROMPT_HISTORY_MERGE_WINDOW_MS = 900
 const MAX_HISTORY_ENTRIES = 100
 
-const getDefaultPageLayout = (index: number): CanvasPageLayout => ({
-  x: 100 + index * 1600,
-  y: 100,
-  width: 1550,
-  height: 900,
-})
+const getDefaultPageLayout = (page: PageType | Pick<PageType, "metadata"> | undefined, index: number): CanvasPageLayout => {
+  const viewport = page?.metadata?.viewports?.[0]
+
+  if (viewport) {
+    return {
+      x: 100 + index * Math.max(viewport.width + 120, 520),
+      y: 100,
+      width: viewport.width,
+      height: viewport.height,
+    }
+  }
+
+  return {
+    x: 100 + index * 1600,
+    y: 100,
+    width: 1550,
+    height: 900,
+  }
+}
 
 const normalizePageLayouts = (
   pages: PageType[],
   layouts: Record<string, CanvasPageLayout>
 ) => pages.reduce<Record<string, CanvasPageLayout>>((acc, page, index) => {
-  acc[page.id] = layouts[page.id] ?? getDefaultPageLayout(index)
+  const existingLayout = layouts[page.id]
+  const viewport = page.metadata?.viewports?.[0]
+  const shouldUpgradeLegacyDesktopLayout = Boolean(
+    viewport &&
+    existingLayout &&
+    existingLayout.width === 1550 &&
+    existingLayout.height === 900
+  )
+
+  acc[page.id] = shouldUpgradeLegacyDesktopLayout
+    ? getDefaultPageLayout(page, index)
+    : existingLayout ?? getDefaultPageLayout(page, index)
   return acc
 }, {})
 
@@ -164,6 +191,7 @@ const ChatInterface = ({
   const [input, setInput] = useState("")
   const [contentDepth, setContentDepth] = useState<ContentDepth>(DEFAULT_CONTENT_DEPTH)
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>(DEFAULT_CREATIVITY_LEVEL)
+  const [generationPlatform, setGenerationPlatform] = useState<GenerationPlatform>(DEFAULT_GENERATION_PLATFORM)
   const [generationMode, setGenerationMode] = useState<GenerationMode>(DEFAULT_GENERATION_MODE)
   const [layoutComplexity, setLayoutComplexity] = useState<LayoutComplexity>(DEFAULT_LAYOUT_COMPLEXITY)
   const [modelProvider, setModelProvider] = useState<ModelProvider>(DEFAULT_MODEL_PROVIDER)
@@ -580,6 +608,7 @@ const ChatInterface = ({
           idempotencyKey: crypto.randomUUID().replace(/-/g, "_"),
           contentDepth,
           creativityLevel,
+          generationPlatform,
           generationMode,
           layoutComplexity,
           modelProvider,
@@ -690,12 +719,14 @@ const ChatInterface = ({
         setInput={handleInputChange}
         contentDepth={contentDepth}
         creativityLevel={creativityLevel}
+        generationPlatform={generationPlatform}
         generationMode={generationMode}
         layoutComplexity={layoutComplexity}
         modelProvider={modelProvider}
         styleIntensity={styleIntensity}
         setContentDepth={setContentDepth}
         setCreativityLevel={setCreativityLevel}
+        setGenerationPlatform={setGenerationPlatform}
         setGenerationMode={setGenerationMode}
         setLayoutComplexity={setLayoutComplexity}
         setModelProvider={setModelProvider}
@@ -783,12 +814,14 @@ const ChatInterface = ({
           setInput={handleInputChange}
           contentDepth={contentDepth}
           creativityLevel={creativityLevel}
+          generationPlatform={generationPlatform}
           generationMode={generationMode}
           layoutComplexity={layoutComplexity}
           modelProvider={modelProvider}
           styleIntensity={styleIntensity}
           setContentDepth={setContentDepth}
           setCreativityLevel={setCreativityLevel}
+          setGenerationPlatform={setGenerationPlatform}
           setGenerationMode={setGenerationMode}
           setLayoutComplexity={setLayoutComplexity}
           setModelProvider={setModelProvider}

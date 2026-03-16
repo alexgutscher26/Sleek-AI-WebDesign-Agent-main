@@ -11,6 +11,7 @@ import { PageType } from '@/types/project';
 import { ErrorState, LoadingState } from '../ui/view-state';
 import type { ContentDepth } from '@/constants/content-depth';
 import type { CreativityLevel } from '@/constants/creativity-level';
+import type { GenerationPlatform } from '@/constants/generation-platform';
 import type { GenerationMode } from '@/constants/generation-mode';
 import type { LayoutComplexity } from '@/constants/layout-complexity';
 import type { ModelProvider } from '@/constants/model-provider';
@@ -20,6 +21,7 @@ type PropsType = {
   className?: string;
   contentDepth: ContentDepth;
   creativityLevel: CreativityLevel;
+  generationPlatform: GenerationPlatform;
   generationMode: GenerationMode;
   layoutComplexity: LayoutComplexity;
   modelProvider: ModelProvider;
@@ -29,6 +31,7 @@ type PropsType = {
   isProjectLoading?: boolean;
   setContentDepth: (depth: ContentDepth) => void;
   setCreativityLevel: (level: CreativityLevel) => void;
+  setGenerationPlatform: (platform: GenerationPlatform) => void;
   setGenerationMode: (mode: GenerationMode) => void;
   setLayoutComplexity: (complexity: LayoutComplexity) => void;
   setModelProvider: (provider: ModelProvider) => void;
@@ -54,6 +57,7 @@ const ChatPanel = ({
   className,
   contentDepth,
   creativityLevel,
+  generationPlatform,
   generationMode,
   layoutComplexity,
   modelProvider,
@@ -63,6 +67,7 @@ const ChatPanel = ({
   setInput,
   setContentDepth,
   setCreativityLevel,
+  setGenerationPlatform,
   setGenerationMode,
   setLayoutComplexity,
   setModelProvider,
@@ -171,6 +176,7 @@ const ChatPanel = ({
           input={input}
           contentDepth={contentDepth}
           creativityLevel={creativityLevel}
+          generationPlatform={generationPlatform}
           generationMode={generationMode}
           layoutComplexity={layoutComplexity}
           modelProvider={modelProvider}
@@ -180,6 +186,7 @@ const ChatPanel = ({
           selectedPage={selectedPage}
           setContentDepth={setContentDepth}
           setCreativityLevel={setCreativityLevel}
+          setGenerationPlatform={setGenerationPlatform}
           setGenerationMode={setGenerationMode}
           setLayoutComplexity={setLayoutComplexity}
           setModelProvider={setModelProvider}

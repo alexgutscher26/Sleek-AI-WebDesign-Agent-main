@@ -63,6 +63,8 @@ const PageFrame = ({
     page.name, page.rootStyles, page.id
   )
   const isSelected = selectedPageId === page.id
+  const primaryViewport = page.metadata?.viewports?.[0]
+  const isMobileViewport = Boolean(primaryViewport && primaryViewport.width <= 430)
 
   useEffect(() => {
     setRenameValue(page.name)
@@ -338,18 +340,35 @@ const PageFrame = ({
               </div>
             </div>
           )}
-        <div className="w-full relative overflow-hidden rounded-sm
-        bg-muted/90">
+        <div className={cn(
+          "w-full relative overflow-hidden bg-muted/90",
+          isMobileViewport ? "rounded-[2.25rem] border-[10px] border-neutral-900 shadow-2xl" : "rounded-sm"
+        )}>
+          {isMobileViewport && (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center pt-3">
+                <div className="h-6 w-32 rounded-full bg-neutral-900" />
+              </div>
+              <div className="pointer-events-none absolute right-3 top-16 z-20 h-14 w-1 rounded-full bg-neutral-800/90" />
+              <div className="pointer-events-none absolute left-[-2px] top-20 z-20 h-16 w-1 rounded-full bg-neutral-800/90" />
+            </>
+          )}
+
           {page.isLoading ? (
-            <div className="w-full h-full flex flex-col py-10 px-10 gap-3
-                bg-black/50 dark:bg-white/50 animate-pulse rounded-sm mx-px"
+            <div className={cn(
+              "w-full h-full flex flex-col gap-3 bg-black/50 dark:bg-white/50 animate-pulse",
+              isMobileViewport ? "px-5 pt-14 pb-6 rounded-[1.7rem]" : "px-10 py-10 rounded-sm mx-px"
+            )}
               style={{ width: layout.width, height: layout.height }}>
               <Skeleton className="w-full h-8 bg-black/50 dark:bg-white/50" />
               <Skeleton className="w-1/2 h-10 bg-black/50 dark:bg-white/50 curs" />
             </div>
           ) : page.error ? (
             <div
-              className="flex items-center justify-center bg-background p-8"
+              className={cn(
+                "flex items-center justify-center bg-background p-8",
+                isMobileViewport && "rounded-[1.7rem]"
+              )}
               style={{ width: layout.width, height: layout.height }}
             >
               <ErrorState
@@ -360,7 +379,10 @@ const PageFrame = ({
             </div>
           ) : !page.htmlContent.trim() ? (
             <div
-              className="flex items-center justify-center bg-background p-8"
+              className={cn(
+                "flex items-center justify-center bg-background p-8",
+                isMobileViewport && "rounded-[1.7rem]"
+              )}
               style={{ width: layout.width, height: layout.height }}
             >
               <EmptyState
@@ -375,6 +397,7 @@ const PageFrame = ({
               srcDoc={fullHtml}
               title={page.name}
               sandbox='allow-scripts'
+              className={cn(isMobileViewport && "rounded-[1.7rem] bg-background")}
               style={{
                 width: "100%",
                 height: `${layout.height}px`,

@@ -27,12 +27,25 @@ type PropsType = {
   onSelectPage: (pageId: string | null) => void
 }
 
-const getDefaultPageLayout = (index: number): CanvasPageLayout => ({
-  x: 100 + index * 1600,
-  y: 100,
-  width: 1550,
-  height: 900,
-})
+const getDefaultPageLayout = (page: PageType | Pick<PageType, "metadata"> | undefined, index: number): CanvasPageLayout => {
+  const viewport = page?.metadata?.viewports?.[0]
+
+  if (viewport) {
+    return {
+      x: 100 + index * Math.max(viewport.width + 120, 520),
+      y: 100,
+      width: viewport.width,
+      height: viewport.height,
+    }
+  }
+
+  return {
+    x: 100 + index * 1600,
+    y: 100,
+    width: 1550,
+    height: 900,
+  }
+}
 
 const Canvas = ({
   isProjectLoading,
@@ -89,7 +102,8 @@ const Canvas = ({
     }
 
     const sourceIndex = pages.findIndex((page) => page.id === pageId)
-    const sourceLayout = pageLayouts[pageId] ?? getDefaultPageLayout(Math.max(sourceIndex, 0))
+    const sourcePage = pages.find((page) => page.id === pageId)
+    const sourceLayout = pageLayouts[pageId] ?? getDefaultPageLayout(sourcePage, Math.max(sourceIndex, 0))
     const duplicatedPage = {
       ...result.data,
       isLoading: false,
@@ -214,7 +228,7 @@ const Canvas = ({
                     <PageFrame
                       key={page.id}
                       page={page}
-                      layout={pageLayouts[page.id] ?? getDefaultPageLayout(i)}
+                      layout={pageLayouts[page.id] ?? getDefaultPageLayout(page, i)}
                       scale={currentScale}
                       toolMode={toolMode}
                       selectedPageId={selectedPageId}

@@ -18,6 +18,11 @@ import {
   DEFAULT_CREATIVITY_LEVEL,
   type CreativityLevel
 } from "@/constants/creativity-level"
+import {
+  DEFAULT_GENERATION_PLATFORM,
+  GENERATION_PLATFORM_SET,
+  type GenerationPlatform
+} from "@/constants/generation-platform"
 import { DEFAULT_GENERATION_MODE, GENERATION_MODE_SET, type GenerationMode } from "@/constants/generation-mode"
 import {
   DEFAULT_LAYOUT_COMPLEXITY,
@@ -81,6 +86,7 @@ export type ProjectPostBody = {
   contentDepth: ContentDepth
   creativityLevel: CreativityLevel
   generationMode: GenerationMode
+  generationPlatform: GenerationPlatform
   layoutComplexity: LayoutComplexity
   modelProvider: ModelProvider
   styleIntensity: StyleIntensity
@@ -159,6 +165,21 @@ const validateGenerationMode = (value: unknown, field = "generationMode") => {
   }
 
   return { ok: true as const, value: value as GenerationMode }
+}
+
+const validateGenerationPlatform = (value: unknown, field = "generationPlatform") => {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true as const, value: DEFAULT_GENERATION_PLATFORM }
+  }
+
+  if (typeof value !== "string" || !GENERATION_PLATFORM_SET.has(value as GenerationPlatform)) {
+    return {
+      ok: false as const,
+      issue: { field, message: "Must be one of: ios, android, both." }
+    }
+  }
+
+  return { ok: true as const, value: value as GenerationPlatform }
 }
 
 const validateContentDepth = (value: unknown, field = "contentDepth") => {
@@ -481,6 +502,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   const contentDepthResult = validateContentDepth(input.contentDepth)
   const creativityLevelResult = validateCreativityLevel(input.creativityLevel)
   const generationModeResult = validateGenerationMode(input.generationMode)
+  const generationPlatformResult = validateGenerationPlatform(input.generationPlatform)
   const layoutComplexityResult = validateLayoutComplexity(input.layoutComplexity)
   const modelProviderResult = validateModelProvider(input.modelProvider)
   const styleIntensityResult = validateStyleIntensity(input.styleIntensity)
@@ -491,6 +513,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   if (!contentDepthResult.ok) issues.push(contentDepthResult.issue)
   if (!creativityLevelResult.ok) issues.push(creativityLevelResult.issue)
   if (!generationModeResult.ok) issues.push(generationModeResult.issue)
+  if (!generationPlatformResult.ok) issues.push(generationPlatformResult.issue)
   if (!layoutComplexityResult.ok) issues.push(layoutComplexityResult.issue)
   if (!modelProviderResult.ok) issues.push(modelProviderResult.issue)
   if (!styleIntensityResult.ok) issues.push(styleIntensityResult.issue)
@@ -607,6 +630,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     !contentDepthResult.ok ||
     !creativityLevelResult.ok ||
     !generationModeResult.ok ||
+    !generationPlatformResult.ok ||
     !layoutComplexityResult.ok ||
     !modelProviderResult.ok ||
     !styleIntensityResult.ok
@@ -623,6 +647,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     contentDepth: contentDepthResult.value,
     creativityLevel: creativityLevelResult.value,
     generationMode: generationModeResult.value,
+    generationPlatform: generationPlatformResult.value,
     layoutComplexity: layoutComplexityResult.value,
     modelProvider: modelProviderResult.value,
     styleIntensity: styleIntensityResult.value,
