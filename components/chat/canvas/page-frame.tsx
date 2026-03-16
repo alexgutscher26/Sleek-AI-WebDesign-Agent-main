@@ -20,28 +20,28 @@ type ColorToken = {
 
 type PropsType = {
   page: PageType
-  initialPosition?: { x: number; y: number };
+  layout: { x: number; y: number; width: number; height: number };
   scale?: number;
   toolMode: ToolModeType;
   selectedPageId: string | null;
   setSelectedPageId: (pageId: string | null) => void
   isDeleting: boolean;
   onDeletePage: (pageId: string) => void
+  onLayoutCommit: (pageId: string, layout: { x: number; y: number; width: number; height: number }) => void
 }
 
 const PageFrame = ({
   page,
-  initialPosition = { x: 0, y: 0 },
+  layout,
   scale = 1,
   toolMode,
   selectedPageId,
   setSelectedPageId,
   isDeleting,
-  onDeletePage
+  onDeletePage,
+  onLayoutCommit
 }: PropsType) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  const [size, setSize] = useState({ width: 1550, height: 900 });
   const [isHovered, setIsHovered] = useState(false);
   const [showColorScheme, setShowColorScheme] = useState(false);
 
@@ -54,16 +54,18 @@ const PageFrame = ({
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === "FRAME_HEIGHT" && event.data.
         pageId === page.id) {
-        setSize(prev => ({
-          ...prev,
-          height: event.data.height
-        }))
+        if (layout.height !== event.data.height) {
+          onLayoutCommit(page.id, {
+            ...layout,
+            height: event.data.height
+          })
+        }
       }
     }
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage)
-  }, [page.id])
+  }, [layout, onLayoutCommit, page.id])
 
   const colorTokens = useMemo<ColorToken[]>(() => {
     if (!page.rootStyles) return [];
@@ -92,22 +94,32 @@ const PageFrame = ({
     <>
       <Rnd
         default={{
-          x: initialPosition.x,
-          y: initialPosition.y,
-          width: size.width,
-          height: size.height
+          x: layout.x,
+          y: layout.y,
+          width: layout.width,
+          height: layout.height
         }}
-        size={{ width: size.width, height: size.height }}
+        position={{ x: layout.x, y: layout.y }}
+        size={{ width: layout.width, height: layout.height }}
         minWidth={320}
         minHeight={900}
         scale={scale}
         disableDragging={toolMode === TOOL_MODE_ENUM.HAND}
         enableResizing={(isSelected || isHovered) && toolMode !== TOOL_MODE_ENUM.HAND}
-        onResize={(e, direction, ref) => {
-          setSize({
+        onDragStop={(_, data) => {
+          onLayoutCommit(page.id, {
+            ...layout,
+            x: data.x,
+            y: data.y
+          })
+        }}
+        onResizeStop={(_, __, ref, ___, position) => {
+          onLayoutCommit(page.id, {
+            x: position.x,
+            y: position.y,
             width: parseInt(ref.style.width),
             height: parseInt(ref.style.height)
-          });
+          })
         }}
         onClick={(e: React.MouseEvent) => {
           e.stopPropagation();
@@ -226,14 +238,14 @@ const PageFrame = ({
           {page.isLoading ? (
             <div className="w-full h-full flex flex-col py-10 px-10 gap-3
                 bg-black/50 dark:bg-white/50 animate-pulse rounded-sm mx-px"
-              style={{ width: size.width, height: size.height }}>
+              style={{ width: layout.width, height: layout.height }}>
               <Skeleton className="w-full h-8 bg-black/50 dark:bg-white/50" />
               <Skeleton className="w-1/2 h-10 bg-black/50 dark:bg-white/50 curs" />
             </div>
           ) : page.error ? (
             <div
               className="flex items-center justify-center bg-background p-8"
-              style={{ width: size.width, height: size.height }}
+              style={{ width: layout.width, height: layout.height }}
             >
               <ErrorState
                 title={`${page.name} failed to render`}
@@ -244,7 +256,7 @@ const PageFrame = ({
           ) : !page.htmlContent.trim() ? (
             <div
               className="flex items-center justify-center bg-background p-8"
-              style={{ width: size.width, height: size.height }}
+              style={{ width: layout.width, height: layout.height }}
             >
               <EmptyState
                 title={`${page.name} is empty`}
@@ -260,7 +272,7 @@ const PageFrame = ({
               sandbox='allow-scripts'
               style={{
                 width: "100%",
-                height: `${size.height}px`,
+                height: `${layout.height}px`,
                 border: "none",
                 display: "block",
                 pointerEvents: "none"

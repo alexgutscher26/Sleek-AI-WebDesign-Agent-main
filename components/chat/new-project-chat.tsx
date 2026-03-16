@@ -135,6 +135,7 @@ const NewProjectChat = ({
               setGenerationMode={setGenerationMode}
               setStyleIntensity={setStyleIntensity}
               setInput={setInput}
+              onClearSelectedPage={() => undefined}
               onStop={onStop}
               onSubmit={onSubmit}
             />

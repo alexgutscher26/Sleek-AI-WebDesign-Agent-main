@@ -1,7 +1,7 @@
 import React from 'react'
 import { TOOL_MODE_ENUM, ToolModeType } from '@/constants/canvas';
 import { Button } from '@/components/ui/button';
-import { HandIcon, MinusIcon, MousePointer, PlusIcon } from 'lucide-react';
+import { HandIcon, MinusIcon, MousePointer, PlusIcon, Redo2Icon, Undo2Icon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
@@ -11,6 +11,10 @@ type PropsType = {
   zoomPercent: number;
   toolMode: ToolModeType;
   setToolMode: (toolMode: ToolModeType) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 };
 const CanvasControls = ({
   zoomIn,
@@ -18,6 +22,10 @@ const CanvasControls = ({
   zoomPercent,
   toolMode,
   setToolMode,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: PropsType) => {
 
   return (
@@ -27,6 +35,31 @@ const CanvasControls = ({
       text-foreground shadow-md backdrop-blur sm:bottom-6 sm:gap-2 sm:px-4
       "
     >
+
+      <div className='flex items-center gap-1'>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="rounded-full cursor-pointer text-inherit! hover:bg-secondary"
+          onClick={onUndo}
+          disabled={!canUndo}
+          aria-label="Undo"
+        >
+          <Undo2Icon />
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="rounded-full cursor-pointer text-inherit! hover:bg-secondary"
+          onClick={onRedo}
+          disabled={!canRedo}
+          aria-label="Redo"
+        >
+          <Redo2Icon />
+        </Button>
+      </div>
+
+      <Separator orientation="vertical" className="h-5 hidden sm:block!" />
 
       <div className='flex items-center gap-1'>
         <Button

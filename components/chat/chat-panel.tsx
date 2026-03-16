@@ -26,6 +26,7 @@ type PropsType = {
   error?: Error;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
+  onClearSelectedPage: () => void;
   status: ChatStatus;
   selectedPage?: PageType
 }
@@ -49,6 +50,7 @@ const ChatPanel = ({
   messages,
   onStop,
   onSubmit,
+  onClearSelectedPage,
   status,
   error,
   isProjectLoading,
@@ -155,6 +157,7 @@ const ChatPanel = ({
           setGenerationMode={setGenerationMode}
           setStyleIntensity={setStyleIntensity}
           setInput={setInput}
+          onClearSelectedPage={onClearSelectedPage}
           onStop={onStop}
           onSubmit={onSubmit}
 

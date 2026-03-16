@@ -17,6 +17,7 @@ import { useCanvas } from "@/hooks/use-canvas";
 import { ErrorState } from "../ui/view-state";
 import { DEFAULT_GENERATION_MODE, type GenerationMode } from "@/constants/generation-mode";
 import { DEFAULT_STYLE_INTENSITY, type StyleIntensity } from "@/constants/style-intensity";
+import { TOOL_MODE_ENUM, type ToolModeType } from "@/constants/canvas";
 
 type PropsType = {
   isProjectPage?: boolean;
@@ -47,7 +48,52 @@ type GenerationStreamData = {
   status?: "error" | "canceled" | string;
 }
 
+export type CanvasPageLayout = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type EditorSnapshot = {
+  input: string;
+  selectedPageId: string | null;
+  toolMode: ToolModeType;
+  pageLayouts: Record<string, CanvasPageLayout>;
+}
+
+export type EditorHistoryControls = {
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const PROMPT_HISTORY_MERGE_WINDOW_MS = 900
+const MAX_HISTORY_ENTRIES = 100
+
+const getDefaultPageLayout = (index: number): CanvasPageLayout => ({
+  x: 100 + index * 1600,
+  y: 100,
+  width: 1550,
+  height: 900,
+})
+
+const normalizePageLayouts = (
+  pages: PageType[],
+  layouts: Record<string, CanvasPageLayout>
+) => pages.reduce<Record<string, CanvasPageLayout>>((acc, page, index) => {
+  acc[page.id] = layouts[page.id] ?? getDefaultPageLayout(index)
+  return acc
+}, {})
+
+const snapshotsEqual = (a: EditorSnapshot, b: EditorSnapshot) => (
+  a.input === b.input &&
+  a.selectedPageId === b.selectedPageId &&
+  a.toolMode === b.toolMode &&
+  JSON.stringify(a.pageLayouts) === JSON.stringify(b.pageLayouts)
+)
 
 const isEditableTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) {
@@ -117,7 +163,11 @@ const ChatInterface = ({
   const [hasStarted, setHasStarted] = useState(isProjectPage);
   const [projectTitle, setProjectTitle] = useState<string | null>(null)
   const [pages, setPages] = useState<PageType[]>([]);
+  const [toolMode, setToolMode] = useState<ToolModeType>(TOOL_MODE_ENUM.SELECT)
+  const [pageLayouts, setPageLayouts] = useState<Record<string, CanvasPageLayout>>({})
   const [activeCompactPane, setActiveCompactPane] = useState<"chat" | "canvas">("chat");
+  const [pastSnapshots, setPastSnapshots] = useState<EditorSnapshot[]>([])
+  const [futureSnapshots, setFutureSnapshots] = useState<EditorSnapshot[]>([])
 
   const {
     data: projectData,
@@ -329,9 +379,15 @@ const ChatInterface = ({
       if (projectData && slugId !== lastSyncedSlug.current) {
           queueMicrotask(() => {
             if (projectData.messages) setMessages(projectData.messages);
-            if (projectData.pages) setPages(projectData.pages);
+            if (projectData.pages) {
+              setPages(projectData.pages);
+              setPageLayouts(normalizePageLayouts(projectData.pages, {}))
+            }
           })
           lastSyncedSlug.current = slugId;
+          setPastSnapshots([])
+          setFutureSnapshots([])
+          historyMetaRef.current = { lastKind: null, lastAt: 0 }
       }
   }, [projectData, slugId, setMessages]);
 
@@ -343,6 +399,10 @@ const ChatInterface = ({
         setMessages([])
         setHasStarted(false)
         setProjectTitle(null)
+        setPageLayouts({})
+        setToolMode(TOOL_MODE_ENUM.SELECT)
+        setPastSnapshots([])
+        setFutureSnapshots([])
       }
     }
 
@@ -358,8 +418,131 @@ const ChatInterface = ({
   }, [pathname, hasStarted, isProjectPage, setMessages])
 
   const { selectedPageId, setSelectedPageId } = useCanvas()
+  const historyMetaRef = useRef<{ lastKind: string | null; lastAt: number }>({
+    lastKind: null,
+    lastAt: 0,
+  })
+  const currentSnapshotRef = useRef<EditorSnapshot>({
+    input: "",
+    selectedPageId: null,
+    toolMode: TOOL_MODE_ENUM.SELECT,
+    pageLayouts: {},
+  })
 
   const isLoading = status === "submitted" || status === "streaming"
+  const captureSnapshot = (
+    overrides: Partial<EditorSnapshot> = {}
+  ): EditorSnapshot => ({
+    input,
+    selectedPageId,
+    toolMode,
+    pageLayouts: normalizePageLayouts(pages, pageLayouts),
+    ...overrides,
+  })
+
+  useEffect(() => {
+    currentSnapshotRef.current = captureSnapshot()
+  }, [input, pageLayouts, pages, selectedPageId, toolMode])
+
+  useEffect(() => {
+    setPageLayouts((prev) => normalizePageLayouts(pages, prev))
+  }, [pages])
+
+  const applySnapshot = (snapshot: EditorSnapshot) => {
+    setInput(snapshot.input)
+    void setSelectedPageId(snapshot.selectedPageId)
+    setToolMode(snapshot.toolMode)
+    setPageLayouts(snapshot.pageLayouts)
+  }
+
+  const commitSnapshot = (
+    nextSnapshot: EditorSnapshot,
+    kind: string,
+    mergeWindowMs = 0
+  ) => {
+    const currentSnapshot = currentSnapshotRef.current
+    if (snapshotsEqual(currentSnapshot, nextSnapshot)) {
+      return
+    }
+
+    const now = Date.now()
+    const shouldMerge = mergeWindowMs > 0
+      && historyMetaRef.current.lastKind === kind
+      && now - historyMetaRef.current.lastAt < mergeWindowMs
+
+    if (!shouldMerge) {
+      setPastSnapshots((prev) => [...prev, currentSnapshot].slice(-MAX_HISTORY_ENTRIES))
+    }
+
+    setFutureSnapshots([])
+    historyMetaRef.current = { lastKind: kind, lastAt: now }
+    applySnapshot(nextSnapshot)
+  }
+
+  const undoHistory = () => {
+    setPastSnapshots((prev) => {
+      const previousSnapshot = prev.at(-1)
+      if (!previousSnapshot) {
+        return prev
+      }
+
+      const currentSnapshot = currentSnapshotRef.current
+      setFutureSnapshots((future) => [currentSnapshot, ...future].slice(0, MAX_HISTORY_ENTRIES))
+      historyMetaRef.current = { lastKind: null, lastAt: 0 }
+      applySnapshot(previousSnapshot)
+      return prev.slice(0, -1)
+    })
+  }
+
+  const redoHistory = () => {
+    setFutureSnapshots((prev) => {
+      const nextSnapshot = prev[0]
+      if (!nextSnapshot) {
+        return prev
+      }
+
+      const currentSnapshot = currentSnapshotRef.current
+      setPastSnapshots((past) => [...past, currentSnapshot].slice(-MAX_HISTORY_ENTRIES))
+      historyMetaRef.current = { lastKind: null, lastAt: 0 }
+      applySnapshot(nextSnapshot)
+      return prev.slice(1)
+    })
+  }
+
+  const historyControls: EditorHistoryControls = {
+    canUndo: pastSnapshots.length > 0,
+    canRedo: futureSnapshots.length > 0,
+    undo: undoHistory,
+    redo: redoHistory,
+  }
+
+  const handleInputChange = (nextInput: string) => {
+    commitSnapshot(
+      captureSnapshot({ input: nextInput }),
+      "prompt",
+      PROMPT_HISTORY_MERGE_WINDOW_MS
+    )
+  }
+
+  const updateSelectedPage = (nextPageId: string | null, historyKind = "page-selection") => {
+    commitSnapshot(captureSnapshot({ selectedPageId: nextPageId }), historyKind)
+  }
+
+  const updateToolMode = (nextToolMode: ToolModeType) => {
+    commitSnapshot(captureSnapshot({ toolMode: nextToolMode }), "canvas-tool")
+  }
+
+  const handlePageLayoutCommit = (pageId: string, nextLayout: CanvasPageLayout) => {
+    const nextPageLayouts = {
+      ...normalizePageLayouts(pages, pageLayouts),
+      [pageId]: nextLayout,
+    }
+
+    commitSnapshot(
+      captureSnapshot({ pageLayouts: nextPageLayouts }),
+      `canvas-layout:${pageId}`
+    )
+  }
 
   const onSubmit = async (
     message: PromptInputMessage,
@@ -402,6 +585,10 @@ const ChatInterface = ({
       setHasStarted(false);
       setMessages([]);
       setProjectTitle(null)
+      setPageLayouts({})
+      setToolMode(TOOL_MODE_ENUM.SELECT)
+      setPastSnapshots([])
+      setFutureSnapshots([])
     }
     router.push("/");
   }
@@ -438,7 +625,22 @@ const ChatInterface = ({
             ? fallbackIndex
             : (currentIndex + (event.key === "]" ? 1 : -1) + pages.length) % pages.length
 
-          setSelectedPageId(pages[nextIndex]?.id ?? null)
+          updateSelectedPage(pages[nextIndex]?.id ?? null, "page-navigation")
+          return
+        }
+      }
+
+      if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+        const key = event.key.toLowerCase()
+        if (key === "z" && !event.shiftKey) {
+          event.preventDefault()
+          undoHistory()
+          return
+        }
+
+        if (key === "y" || (key === "z" && event.shiftKey)) {
+          event.preventDefault()
+          redoHistory()
           return
         }
       }
@@ -452,7 +654,7 @@ const ChatInterface = ({
         }
 
         if (selectedPageId) {
-          setSelectedPageId(null)
+          updateSelectedPage(null, "page-selection-clear")
           event.preventDefault()
           return
         }
@@ -466,13 +668,13 @@ const ChatInterface = ({
 
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [isLoading, pages, selectedPageId, setSelectedPageId, stop])
+  }, [isLoading, pages, selectedPageId, stop])
 
   if (!isProjectPage && !hasStarted) {
     return (
       <NewProjectChat
         input={input}
-        setInput={setInput}
+        setInput={handleInputChange}
         generationMode={generationMode}
         styleIntensity={styleIntensity}
         setGenerationMode={setGenerationMode}
@@ -557,7 +759,7 @@ const ChatInterface = ({
           className="h-full pt-12 md:pt-13"
           messages={messages}
           input={input}
-          setInput={setInput}
+          setInput={handleInputChange}
           generationMode={generationMode}
           styleIntensity={styleIntensity}
           setGenerationMode={setGenerationMode}
@@ -567,6 +769,7 @@ const ChatInterface = ({
           selectedPage={selectedPage}
           status={status}
           error={error}
+          onClearSelectedPage={() => updateSelectedPage(null, "page-selection-clear")}
           onStop={stop}
           onSubmit={onSubmit}
         />
@@ -581,6 +784,13 @@ const ChatInterface = ({
           setPages={setPages}
           slugId={slugId}
           isProjectLoading={isProjectLoading}
+          pageLayouts={pageLayouts}
+          selectedPageId={selectedPageId}
+          setSelectedPageId={(pageId) => updateSelectedPage(pageId)}
+          toolMode={toolMode}
+          setToolMode={updateToolMode}
+          onPageLayoutCommit={handlePageLayoutCommit}
+          history={historyControls}
         />
       </div>
       </div>

@@ -4,29 +4,51 @@ import { TOOL_MODE_ENUM, ToolModeType } from '@/constants/canvas'
 import { cn } from '@/lib/utils';
 import CanvasControls from './canvas-controls';
 import PageFrame from './page-frame';
-import { useCanvas } from '@/hooks/use-canvas';
 import { PageType } from '@/types/project';
 import { deletePageAction } from '@/app/action/action';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { EmptyState, LoadingState } from '@/components/ui/view-state';
+import type { CanvasPageLayout, EditorHistoryControls } from '../index';
 
 type PropsType = {
   pages: PageType[]
   setPages: React.Dispatch<React.SetStateAction<PageType[]>>;
   isProjectLoading?: boolean
   slugId: string
+  pageLayouts: Record<string, CanvasPageLayout>
+  selectedPageId: string | null
+  setSelectedPageId: (pageId: string | null) => void
+  toolMode: ToolModeType
+  setToolMode: (toolMode: ToolModeType) => void
+  onPageLayoutCommit: (pageId: string, layout: CanvasPageLayout) => void
+  history: EditorHistoryControls
 }
 
-const Canvas = ({ isProjectLoading, pages, setPages, slugId }: PropsType) => {
+const getDefaultPageLayout = (index: number): CanvasPageLayout => ({
+  x: 100 + index * 1600,
+  y: 100,
+  width: 1550,
+  height: 900,
+})
+
+const Canvas = ({
+  isProjectLoading,
+  pages,
+  setPages,
+  slugId,
+  pageLayouts,
+  selectedPageId,
+  setSelectedPageId,
+  toolMode,
+  setToolMode,
+  onPageLayoutCommit,
+  history,
+}: PropsType) => {
   const queryClient = useQueryClient()
-  const [toolMode, setToolMode] = useState<ToolModeType>(
-    TOOL_MODE_ENUM.SELECT
-  )
   const [zoomPercent, setZoomPercent] = useState<number>(26)
   const [currentScale, setCurrentScale] = useState<number>(0.26)
   const [deletingPageId, setDeletingPageId] = useState<string | null>(null);
-  const { selectedPageId, setSelectedPageId } = useCanvas()
 
   const handleDelete = async (pageId: string) => {
     setDeletingPageId(pageId);
@@ -121,24 +143,20 @@ const Canvas = ({ isProjectLoading, pages, setPages, slugId }: PropsType) => {
                 )}
 
                 {pages.map((page, i) => {
-                  const x = 100 + i * 1600;
-                  const y = 100;
                   const isDeleting = deletingPageId === page.id;
 
                   return (
                     <PageFrame
                       key={page.id}
                       page={page}
+                      layout={pageLayouts[page.id] ?? getDefaultPageLayout(i)}
                       scale={currentScale}
                       toolMode={toolMode}
-                      initialPosition={{
-                        x,
-                        y
-                      }}
                       selectedPageId={selectedPageId}
                       setSelectedPageId={setSelectedPageId}
                       isDeleting={isDeleting}
                       onDeletePage={handleDelete}
+                      onLayoutCommit={onPageLayoutCommit}
                     />
                   )
                 })}
@@ -151,6 +169,10 @@ const Canvas = ({ isProjectLoading, pages, setPages, slugId }: PropsType) => {
               zoomPercent={zoomPercent}
               toolMode={toolMode}
               setToolMode={setToolMode}
+              canUndo={history.canUndo}
+              canRedo={history.canRedo}
+              onUndo={history.undo}
+              onRedo={history.redo}
             />
           </>
         )}

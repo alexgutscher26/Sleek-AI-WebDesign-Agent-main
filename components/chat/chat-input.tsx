@@ -7,7 +7,6 @@ import { ArrowUpIcon, LockIcon, Square, XIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Attachment, AttachmentPreview, AttachmentRemove, Attachments } from '../ai-elements/attachments';
 import { PageType } from '@/types/project';
-import { useCanvas } from '@/hooks/use-canvas';
 import { Badge } from '../ui/badge';
 import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from '@/lib/request-limits';
 import { toast } from 'sonner';
@@ -25,6 +24,7 @@ type ChatInputProps = {
   setGenerationMode: (mode: GenerationMode) => void;
   setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
+  onClearSelectedPage: () => void;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
 }
@@ -39,13 +39,12 @@ const ChatInput = ({
   setGenerationMode,
   setStyleIntensity,
   setInput,
+  onClearSelectedPage,
   onStop,
   onSubmit,
 }: ChatInputProps) => {
   const { isSignedIn } = useAuth()
   const [showAuthBanner, setShowAuthBanner] = useState(false)
-
-  const { setSelectedPageId } = useCanvas()
   const selectedMode = GENERATION_MODES.find((mode) => mode.value === generationMode)
   const selectedIntensity = STYLE_INTENSITIES.find((intensity) => intensity.value === styleIntensity)
 
@@ -61,7 +60,7 @@ const ChatInput = ({
       styleIntensity,
       selectedPageId: selectedPage?.id
     });
-    setSelectedPageId(null)
+    onClearSelectedPage()
   }
 
 
@@ -122,7 +121,7 @@ const ChatInput = ({
           <div className='px-2 pt-2 w-full'>
             <Badge variant="secondary" className="text-xs">
               {selectedPage.name} Page
-              <button onClick={() => setSelectedPageId(null)}>
+              <button onClick={onClearSelectedPage}>
                 <XIcon className="size-3.5" />
               </button>
             </Badge>
