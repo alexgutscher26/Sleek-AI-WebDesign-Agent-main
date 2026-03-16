@@ -58,8 +58,7 @@
 - [x] Add keyboard shortcuts across chat + canvas
 - [x] Add better mobile and tablet layouts for editor UI
 - [x] Add undo/redo for prompt, page, and canvas operations
-- [ ] Add duplicate/rename/reorder page controls
-- [ ] Add page pin/favorite action
+- [x] Add duplicate/rename/reorder page controls
 - [ ] Add project archive and restore flows
 - [ ] Add autosave indicator and last-saved timestamp
 - [ ] Add project search and filter on home screen

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import CanvasControls from './canvas-controls';
 import PageFrame from './page-frame';
 import { PageType } from '@/types/project';
-import { deletePageAction } from '@/app/action/action';
+import { deletePageAction, duplicatePageAction, renamePageAction } from '@/app/action/action';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { EmptyState, LoadingState } from '@/components/ui/view-state';
@@ -23,6 +23,8 @@ type PropsType = {
   setToolMode: (toolMode: ToolModeType) => void
   onPageLayoutCommit: (pageId: string, layout: CanvasPageLayout) => void
   history: EditorHistoryControls
+  onPagesChange: React.Dispatch<React.SetStateAction<PageType[]>>
+  onSelectPage: (pageId: string | null) => void
 }
 
 const getDefaultPageLayout = (index: number): CanvasPageLayout => ({
@@ -44,6 +46,8 @@ const Canvas = ({
   setToolMode,
   onPageLayoutCommit,
   history,
+  onPagesChange,
+  onSelectPage,
 }: PropsType) => {
   const queryClient = useQueryClient()
   const [zoomPercent, setZoomPercent] = useState<number>(26)
@@ -65,6 +69,56 @@ const Canvas = ({
     })
     setDeletingPageId(null)
     toast.success("Page deleted successfully")
+  }
+
+  const handleDuplicate = async (pageId: string) => {
+    const result = await duplicatePageAction(slugId, pageId)
+    if (result.error || !result.data) {
+      toast.error(result.error || "Failed to duplicate page")
+      return
+    }
+
+    const sourceIndex = pages.findIndex((page) => page.id === pageId)
+    const sourceLayout = pageLayouts[pageId] ?? getDefaultPageLayout(Math.max(sourceIndex, 0))
+    const duplicatedPage = {
+      ...result.data,
+      isLoading: false,
+    }
+
+    onPagesChange((prev) => {
+      const nextPages = [...prev]
+      const insertAt = sourceIndex === -1 ? nextPages.length : sourceIndex + 1
+      nextPages.splice(insertAt, 0, duplicatedPage)
+      return nextPages
+    })
+    onPageLayoutCommit(duplicatedPage.id, {
+      ...sourceLayout,
+      x: sourceLayout.x + 80,
+      y: sourceLayout.y + 80,
+    })
+    onSelectPage(duplicatedPage.id)
+    queryClient.invalidateQueries({
+      queryKey: ["project", slugId]
+    })
+    toast.success("Page duplicated")
+  }
+
+  const handleRename = async (pageId: string, name: string) => {
+    const result = await renamePageAction(slugId, pageId, name)
+    if (result.error || !result.data) {
+      toast.error(result.error || "Failed to rename page")
+      return
+    }
+
+    onPagesChange((prev) => prev.map((page) => (
+      page.id === pageId
+        ? { ...page, name: result.data.name }
+        : page
+    )))
+    queryClient.invalidateQueries({
+      queryKey: ["project", slugId]
+    })
+    toast.success("Page renamed")
   }
 
   return (
@@ -144,6 +198,7 @@ const Canvas = ({
 
                 {pages.map((page, i) => {
                   const isDeleting = deletingPageId === page.id;
+                  const pageIndex = pages.findIndex((entry) => entry.id === page.id)
 
                   return (
                     <PageFrame
@@ -157,6 +212,32 @@ const Canvas = ({
                       isDeleting={isDeleting}
                       onDeletePage={handleDelete}
                       onLayoutCommit={onPageLayoutCommit}
+                      onDuplicatePage={handleDuplicate}
+                      onRenamePage={handleRename}
+                      onMovePageBackward={(pageId) => {
+                        if (pageIndex <= 0) return
+                        onPagesChange((prev) => {
+                          const nextPages = [...prev]
+                          const fromIndex = nextPages.findIndex((entry) => entry.id === pageId)
+                          if (fromIndex <= 0) return prev
+                          const [moved] = nextPages.splice(fromIndex, 1)
+                          nextPages.splice(fromIndex - 1, 0, moved)
+                          return nextPages
+                        })
+                      }}
+                      onMovePageForward={(pageId) => {
+                        if (pageIndex === -1 || pageIndex >= pages.length - 1) return
+                        onPagesChange((prev) => {
+                          const nextPages = [...prev]
+                          const fromIndex = nextPages.findIndex((entry) => entry.id === pageId)
+                          if (fromIndex === -1 || fromIndex >= nextPages.length - 1) return prev
+                          const [moved] = nextPages.splice(fromIndex, 1)
+                          nextPages.splice(fromIndex + 1, 0, moved)
+                          return nextPages
+                        })
+                      }}
+                      canMoveBackward={pageIndex > 0}
+                      canMoveForward={pageIndex !== -1 && pageIndex < pages.length - 1}
                     />
                   )
                 })}

@@ -116,3 +116,101 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
     return { error: "Internal server error" }
   }
 }
+
+export const renamePageAction = async (slugId: string, pageId: string, name: string) => {
+  try {
+    const { user, insforge } = await getAuthServer();
+    if (!user) return { error: "Unauthorized" };
+    const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
+    const trimmedName = name.trim()
+
+    if (!trimmedName) {
+      return { error: "Page name is required" }
+    }
+
+    const { data: project } = await getOwnedProjectBySlug<{ id: string }>(
+      insforge,
+      user.id,
+      parsedSlugId,
+      "id"
+    )
+    if (!project) return { error: "Project not found" }
+
+    const { data: page, error } = await insforge.database.from("pages")
+      .update({ name: trimmedName })
+      .eq("projectId", project.id)
+      .eq("id", pageId)
+      .select("id, name, rootStyles, htmlContent, createdAt, updatedAt, projectId")
+      .single()
+
+    if (error || !page) {
+      return { error: "Failed to rename page" }
+    }
+
+    return { success: true, data: page }
+  } catch (error) {
+    if (error instanceof RequestValidationError) {
+      return { error: "Invalid request" }
+    }
+    return { error: "Internal server error" }
+  }
+}
+
+export const duplicatePageAction = async (slugId: string, pageId: string) => {
+  try {
+    const { user, insforge } = await getAuthServer();
+    if (!user) return { error: "Unauthorized" };
+    const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
+
+    const { data: project } = await getOwnedProjectBySlug<{ id: string }>(
+      insforge,
+      user.id,
+      parsedSlugId,
+      "id"
+    )
+    if (!project) return { error: "Project not found" }
+
+    const { data: sourcePage, error: sourceError } = await insforge.database.from("pages")
+      .select("id, name, rootStyles, htmlContent")
+      .eq("projectId", project.id)
+      .eq("id", pageId)
+      .single()
+
+    if (sourceError || !sourcePage) {
+      return { error: "Page not found" }
+    }
+
+    const { data: siblingPages } = await insforge.database.from("pages")
+      .select("name")
+      .eq("projectId", project.id)
+
+    const existingNames = new Set((siblingPages ?? []).map((page) => String(page.name)))
+    let nextName = `${sourcePage.name} Copy`
+    let copyIndex = 2
+    while (existingNames.has(nextName)) {
+      nextName = `${sourcePage.name} Copy ${copyIndex}`
+      copyIndex += 1
+    }
+
+    const { data: duplicatedPage, error: duplicateError } = await insforge.database.from("pages")
+      .insert([{
+        projectId: project.id,
+        name: nextName,
+        rootStyles: sourcePage.rootStyles,
+        htmlContent: sourcePage.htmlContent
+      }])
+      .select("id, name, rootStyles, htmlContent, createdAt, updatedAt, projectId")
+      .single()
+
+    if (duplicateError || !duplicatedPage) {
+      return { error: "Failed to duplicate page" }
+    }
+
+    return { success: true, data: duplicatedPage }
+  } catch (error) {
+    if (error instanceof RequestValidationError) {
+      return { error: "Invalid request" }
+    }
+    return { error: "Internal server error" }
+  }
+}

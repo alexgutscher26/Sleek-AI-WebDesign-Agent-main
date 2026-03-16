@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Code2, PaintbrushIcon, Trash2Icon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, Code2, CopyIcon, PaintbrushIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Spinner } from '@/components/ui/spinner';
 import { PageType } from '@/types/project';
@@ -28,6 +28,12 @@ type PropsType = {
   isDeleting: boolean;
   onDeletePage: (pageId: string) => void
   onLayoutCommit: (pageId: string, layout: { x: number; y: number; width: number; height: number }) => void
+  onDuplicatePage: (pageId: string) => void
+  onRenamePage: (pageId: string, name: string) => void
+  onMovePageBackward: (pageId: string) => void
+  onMovePageForward: (pageId: string) => void
+  canMoveBackward: boolean
+  canMoveForward: boolean
 }
 
 const PageFrame = ({
@@ -39,16 +45,28 @@ const PageFrame = ({
   setSelectedPageId,
   isDeleting,
   onDeletePage,
-  onLayoutCommit
+  onLayoutCommit,
+  onDuplicatePage,
+  onRenamePage,
+  onMovePageBackward,
+  onMovePageForward,
+  canMoveBackward,
+  canMoveForward,
 }: PropsType) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [showColorScheme, setShowColorScheme] = useState(false);
+  const [showRename, setShowRename] = useState(false);
+  const [renameValue, setRenameValue] = useState(page.name);
 
   const fullHtml = getHTMLWrapper(page.htmlContent,
     page.name, page.rootStyles, page.id
   )
   const isSelected = selectedPageId === page.id
+
+  useEffect(() => {
+    setRenameValue(page.name)
+  }, [page.name])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -88,6 +106,18 @@ const PageFrame = ({
   const handleCopyCode = () => {
     navigator.clipboard.writeText(fullHtml)
     toast.success("Design code copied to clipboard!");
+  }
+
+  const handleRenameSubmit = () => {
+    const trimmedName = renameValue.trim()
+    if (!trimmedName || trimmedName === page.name) {
+      setShowRename(false)
+      setRenameValue(page.name)
+      return
+    }
+
+    onRenamePage(page.id, trimmedName)
+    setShowRename(false)
   }
 
   return (
@@ -217,6 +247,81 @@ const PageFrame = ({
                   onClick={handleCopyCode}
                 >
                   <Code2 className="size-3.5" />
+                </Button>
+
+                <Popover open={showRename} onOpenChange={setShowRename}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="p-1! hover:bg-accent
+                     size-6! cursor-pointer
+                    "
+                    >
+                      <PencilIcon className="size-3.5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-64 p-3">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">
+                        Rename Page
+                      </p>
+                      <input
+                        value={renameValue}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            handleRenameSubmit()
+                          }
+                        }}
+                        className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => setShowRename(false)}>
+                          Cancel
+                        </Button>
+                        <Button size="sm" onClick={handleRenameSubmit}>
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="p-1! hover:bg-accent
+                     size-6! cursor-pointer
+                    "
+                  onClick={() => onDuplicatePage(page.id)}
+                >
+                  <CopyIcon className="size-3.5" />
+                </Button>
+
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="p-1! hover:bg-accent
+                     size-6! cursor-pointer
+                    "
+                  onClick={() => onMovePageBackward(page.id)}
+                  disabled={!canMoveBackward}
+                >
+                  <ChevronLeftIcon className="size-3.5" />
+                </Button>
+
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="p-1! hover:bg-accent
+                     size-6! cursor-pointer
+                    "
+                  onClick={() => onMovePageForward(page.id)}
+                  disabled={!canMoveForward}
+                >
+                  <ChevronRightIcon className="size-3.5" />
                 </Button>
 
                 <Button
