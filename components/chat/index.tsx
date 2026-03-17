@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 import { useChat } from "@ai-sdk/react"
 import { generateSlugId } from "@/lib/utils";

@@ -3,7 +3,8 @@ export const FONT_VARIABLES = `
   --font-heading: "Space Grotesk", sans-serif;
   --font-serif: "Playfair Display";
   --font-mono: "JetBrains Mono";
-`;
+  --font-display: "Space Grotesk", sans-serif;
+  `;
 
 export const BASE_VARIABLES = `
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);

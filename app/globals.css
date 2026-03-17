@@ -176,4 +176,26 @@
     background: color-mix(in oklch, var(--background) 78%, transparent);
     backdrop-filter: blur(20px);
   }
+
+  .sleek-chat-shell [data-slot="prompt-input"] {
+    border-color: rgb(255 255 255 / 0.08);
+    background: #3a2d28;
+    box-shadow: none;
+  }
+
+  .sleek-chat-shell [data-slot="prompt-input"] textarea {
+    color: white;
+  }
+
+  .sleek-chat-shell [data-slot="prompt-input"] textarea::placeholder {
+    color: rgb(255 255 255 / 0.35);
+  }
+
+  .sleek-chat-shell [data-slot="prompt-input"] button {
+    border-color: rgb(255 255 255 / 0.1);
+  }
+
+  .sleek-chat-shell .rounded-xl\! {
+    border-radius: 1.15rem !important;
+  }
 }

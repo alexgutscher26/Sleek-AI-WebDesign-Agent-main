@@ -2,9 +2,8 @@ import { ChatStatus } from "ai";
 import { motion } from "motion/react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { ArrowUpRight, Layers3 } from "lucide-react";
+import { ArrowUpRight, Layers3, Sparkles } from "lucide-react";
 import { PromptInputMessage } from "../ai-elements/prompt-input";
-import { Suggestion, Suggestions } from "../ai-elements/suggestion";
 import ChatInput from "./chat-input";
 import { EmptyState, ErrorState } from "../ui/view-state";
 import type { ContentDepth } from "@/constants/content-depth";
@@ -38,48 +37,38 @@ type PropsType = {
   onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
 };
 
-const suggestions = [
+const promptSuggestions = [
   {
-    label: "Modern HR SaaS Landing Page",
-    value:
-      "A clean, high-conversion B2B SaaS landing page for an HR and Payroll platform. The color palette features a vibrant royal blue primary color, bright yellow accent for CTA buttons, and alternating solid blue and ultra-light gray background sections. The hero section must have a solid blue background with a faint grid mesh, centered bold typography, and a massive overlapping 'bento-style' composition of floating white UI dashboard cards showing mock payroll data and SVG charts. Include a 3-column bento grid for features with mini UI elements, a 2-column section with a stylized SVG globe, a horizontal timeline-based pricing section on a blue background, a 3-column testimonials grid, and a massive bright yellow rounded CTA banner nested just above a clean footer.",
+    label: "Finance app",
+    value: "Design a premium finance mobile app with a calm black interface, strong hierarchy, soft charts, and elegant account overview cards.",
   },
   {
-    label: "AI SaaS Landing Page",
-    value:
-      "A cutting-edge landing page for an autonomous AI workflow platform. Deep space dark mode with vibrant indigo radial light-leaks, floating glassmorphic navbar, hero with glowing gradient text, bento grid showcasing features, and sleek pricing section.",
+    label: "Health app",
+    value: "Create a modern health tracking app with refined onboarding, clean progress modules, and polished habit dashboards.",
   },
   {
-    label: "B2B SaaS Landing",
-    value:
-      "A serious B2B SaaS marketing site with structured hero, client logos strip (Vercel, Linear, Notion, Stripe), feature sections with diagrams, data visualization preview, pricing tiers, FAQ accordion, and enterprise call-to-action. Clear hierarchy and strong spacing rhythm.",
-  },
-  {
-    label: "Sales Landing",
-    value:
-      "A high-contrast, modern B2B SaaS Sales landing page. The theme uses a crisp white background, deep navy/purple-black for inverted containers, and a vibrant Lime Green primary accent. The Hero features a bold H1 with an inline circular icon, next to a floating composition of white and lime-green UI dashboard cards with SVG bar charts. Below the hero is a massive, dark navy rounded-3xl container housing a 2x2 features grid with pill-shaped badges. Follow this with a complex 3-row white bento grid showcasing UI mockups (SVG maps, bar charts, and an overlapping dark stat card). Include a 'How it Works' section with a vertical numbered timeline alongside overlapping login UI mockups. Finish with a dark navy 3-column pricing container and a bright lime-green rounded CTA banner just above a clean, light footer.",
-  },
-  {
-    label: "FinTech Landing",
-    value:
-      "A Dribbble-quality landing page for a modern global payments app. The theme alternates between a deep, dark forest/emerald green and pristine white. The primary accent color is a vibrant neon Emerald Green. The Hero section is dark mode with an emerald radial light-leak, featuring a centered massive H1, a floating UI card representing a mobile banking interface, and smaller glassmorphic pill badges floating around it (e.g., 'Total Balance'). Follow this with a pristine white section containing a muted partner logo cloud, a 6-card bento grid for features with green icons, and two 2-column split sections matching text/checklists against large floating white UI cards. Include a dark-mode pricing section with 3 glassmorphic cards and emerald accents, a white testimonials grid, and a massive dark-green rounded CTA card with an inner radial glow placed just above a sleek, dark-mode footer.",
-  },
-  {
-    label: "Crypto Exchange",
-    value:
-      "A futuristic trading interface for a crypto exchange called 'Apex'. Deep midnight background with electric blue glows. Central trading chart with candlesticks, left order book panel, right trade history, top navbar with BTC $67,432 ETH $3,241 live prices, and glowing buy/sell buttons.",
-  },
-  {
-    label: "Payment Platform",
-    value:
-      "A high-conversion landing page for a payment link product. Strong hero with 'Accept Payments Instantly' headline, live payment preview mockup on the right, trust badges, feature grid explaining no-code checkout, use-case sections (Creators, SaaS, Freelancers), pricing comparison, and a bold CTA. Clean fintech-grade design.",
-  },
-  {
-    label: "Neobank Website",
-    value:
-      "A modern neobank marketing website. Confident hero with app preview, trust metrics row showing '2M+ users', '$4.2B processed', debit card showcase section, feature breakdown grid, comparison table vs traditional banks, testimonials, and strong sign-up CTA.",
+    label: "Productivity app",
+    value: "Design a focused productivity app with minimal navigation, structured task views, and a sleek dark mobile UI.",
   },
 ];
+
+const showcaseCards = [
+  {
+    title: "Calm Sleep",
+    category: "Health & Fitness",
+    tone: "soft",
+  },
+  {
+    title: "Subscription Saver",
+    category: "Finance",
+    tone: "contrast",
+  },
+  {
+    title: "Focus Flow",
+    category: "Productivity",
+    tone: "minimal",
+  },
+] as const;
 
 const NewProjectChat = ({
   input,
@@ -103,45 +92,52 @@ const NewProjectChat = ({
   onStop,
   onSubmit,
 }: PropsType) => {
-  const featuredSuggestions = suggestions.slice(0, 4);
-  const supportingSuggestions = suggestions.slice(4);
-
   const handleSuggestionClick = (value: string) => {
     setInput(value);
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      <div className="hero-grid pointer-events-none absolute inset-0 opacity-50" />
-      <div className="ambient-orb absolute left-[8%] top-28 size-44 rounded-full bg-chart-4/15" />
-      <div className="ambient-orb absolute right-[8%] top-40 size-56 rounded-full bg-chart-2/15 [animation-delay:1.5s]" />
-      <div className="ambient-orb absolute bottom-24 left-1/2 size-64 -translate-x-1/2 rounded-full bg-primary/10 [animation-delay:3s]" />
+    <div className="relative min-h-screen overflow-hidden bg-[#020202] text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_22%),linear-gradient(180deg,#111111_0%,#070707_24%,#010101_100%)]" />
+      <div className="pointer-events-none absolute inset-x-[-12%] top-36 h-52 rounded-[100%] border-t border-white/12 blur-md" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-14 pt-28 sm:px-6 lg:px-8">
-        <section className="mx-auto flex w-full max-w-4xl flex-col items-center">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-16 pt-28 sm:px-6 lg:px-8">
+        <section className="mx-auto w-full max-w-4xl text-center">
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="relative w-full"
+            transition={{ delay: 0.05, duration: 0.4 }}
+            className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/4 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-white/68 backdrop-blur"
           >
-            <div className="glass-panel relative overflow-hidden rounded-[2rem] border border-border/70 p-4 shadow-[0_30px_100px_-48px_rgba(0,0,0,0.9)] sm:p-5">
-              <div className="absolute inset-x-6 top-0 h-px bg-linear-to-r from-transparent via-primary/40 to-transparent" />
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 px-1">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-                    Start a new direction
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">
-                    Shape the brief, then generate a multi-page concept.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground">
-                  <Layers3 className="size-3.5 text-primary" />
-                  Prompt + controls + history
-                </div>
-              </div>
+            <Sparkles className="size-3.5 text-white" />
+            Design faster with Sleek
+          </motion.div>
 
+          <motion.h1
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12, duration: 0.4 }}
+            className="mx-auto mt-8 max-w-3xl text-5xl font-semibold leading-[1.02] tracking-[-0.08em] text-white sm:text-6xl"
+          >
+            A quieter way to create polished app concepts
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18, duration: 0.4 }}
+            className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-white/62 sm:text-base"
+          >
+            Start with a prompt, shape the direction, and move straight into a clean canvas for refinement.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.24, duration: 0.45 }}
+            className="mx-auto mt-10 rounded-[1.75rem] border border-white/10 bg-[#111111]/95 p-3 shadow-[0_40px_120px_-60px_rgba(0,0,0,0.9)]"
+          >
+            <div className="sleek-chat-shell">
               <ChatInput
                 input={input}
                 contentDepth={contentDepth}
@@ -168,87 +164,106 @@ const NewProjectChat = ({
               />
             </div>
           </motion.div>
-        </section>
-
-        <section className="mt-16">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.28 }}
-            className="flex items-end justify-between gap-4"
-          >
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-                Launch points
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-foreground">
-                Start from a strong visual angle
-              </h2>
-            </div>
-            <div className="hidden items-center gap-2 text-sm text-muted-foreground md:flex">
-              Tap a direction to preload the prompt
-              <ArrowUpRight className="size-4" />
-            </div>
-          </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.32 }}
-            className="mt-6 grid gap-4 lg:grid-cols-4"
+            transition={{ delay: 0.3, duration: 0.4 }}
+            className="mx-auto mt-6 flex flex-wrap justify-center gap-3"
           >
-            {featuredSuggestions.map((item, index) => (
+            {promptSuggestions.map((item) => (
               <button
                 key={item.label}
                 type="button"
                 onClick={() => handleSuggestionClick(item.value)}
-                className="group glass-panel rounded-[1.8rem] border border-border/60 p-5 text-left shadow-[0_24px_80px_-46px_rgba(0,0,0,0.72)] transition duration-300 hover:-translate-y-1 hover:border-primary/35"
+                className="rounded-full border border-white/10 bg-white/4 px-4 py-2 text-sm text-white/70 transition hover:border-white/18 hover:bg-white/7 hover:text-white"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-                    0{index + 1}
-                  </span>
-                  <ArrowUpRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
-                </div>
-                <h3 className="mt-8 text-lg font-medium tracking-[-0.03em] text-foreground">
-                  {item.label}
-                </h3>
-                <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted-foreground">
-                  {item.value}
-                </p>
+                {item.label}
               </button>
             ))}
           </motion.div>
+        </section>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.36 }}
-            className="mt-6"
-          >
-            <Suggestions className="justify-start gap-3">
-              {supportingSuggestions.map((item) => (
-                <Suggestion
-                  key={item.label}
-                  className="border-border/60 bg-background/75 font-normal shadow-none"
-                  suggestion={item.value}
-                  onClick={() => handleSuggestionClick(item.value)}
-                >
-                  {item.label}
-                </Suggestion>
-              ))}
-            </Suggestions>
-          </motion.div>
+        <section className="mt-24">
+          <div className="mb-8 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/45">Selected directions</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-white">Clean, focused starting points</h2>
+            </div>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            {showcaseCards.map((item) => (
+              <ShowcaseCard key={item.title} title={item.title} category={item.category} tone={item.tone} />
+            ))}
+          </div>
         </section>
 
         <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.44 }}
-          className="mt-16"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.36, duration: 0.4 }}
+          className="mt-24"
         >
           <ProjectGrid />
         </motion.section>
+      </div>
+    </div>
+  );
+};
+
+const ShowcaseCard = ({
+  title,
+  category,
+  tone,
+}: {
+  title: string;
+  category: string;
+  tone: "soft" | "contrast" | "minimal";
+}) => {
+  const tones = {
+    soft: "bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_38%),linear-gradient(180deg,#1a1a1a_0%,#080808_100%)]",
+    contrast: "bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,#121212_0%,#030303_100%)]",
+    minimal: "bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.1),transparent_34%),linear-gradient(180deg,#171717_0%,#050505_100%)]",
+  }[tone];
+
+  return (
+    <div className="group">
+      <div className="rounded-[1.6rem] border border-white/8 bg-[#0d0d0d] p-3 transition duration-300 group-hover:-translate-y-1 group-hover:border-white/18">
+        <div className={`relative aspect-[4/5] overflow-hidden rounded-[1.25rem] border border-white/8 ${tones}`}>
+          <div className="absolute inset-0 p-4">
+            <div className="flex items-center justify-between">
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/55">
+                {category}
+              </span>
+              <ArrowUpRight className="size-4 text-white/35" />
+            </div>
+
+            <div className="absolute inset-x-5 bottom-5 top-18 flex flex-col justify-between">
+              <div>
+                <p className="text-2xl font-semibold tracking-[-0.05em] text-white">{title}</p>
+                <p className="mt-2 max-w-48 text-sm leading-6 text-white/55">
+                  Calm hierarchy, deliberate spacing, and premium dark surfaces.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-[1rem] bg-white/6 p-3">
+                  <div className="h-2 w-12 rounded-full bg-white/18" />
+                  <div className="mt-3 h-18 rounded-[0.9rem] bg-white/8" />
+                </div>
+                <div className="rounded-[1rem] bg-white/6 p-3">
+                  <div className="h-2 w-16 rounded-full bg-white/18" />
+                  <div className="mt-3 h-18 rounded-[0.9rem] bg-white/8" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="px-1 pt-3">
+        <p className="text-lg font-medium tracking-[-0.03em] text-white">{title}</p>
+        <p className="text-sm text-white/52">{category}</p>
       </div>
     </div>
   );
@@ -283,7 +298,7 @@ const ProjectGrid = () => {
   if (isLoading) return <ProjectGridSkeleton />;
   if (isError) {
     return (
-      <div className="glass-panel rounded-[2rem] border border-border/60 p-6 shadow-[0_24px_80px_-46px_rgba(0,0,0,0.72)]">
+      <div className="rounded-[1.8rem] border border-white/8 bg-[#0b0b0b] p-6">
         <ErrorState
           title="Recent projects are unavailable"
           description="We couldn't load your project history right now."
@@ -296,7 +311,7 @@ const ProjectGrid = () => {
 
   if (!projects || projects.length === 0) {
     return (
-      <div className="glass-panel rounded-[2rem] border border-border/60 p-6 shadow-[0_24px_80px_-46px_rgba(0,0,0,0.72)]">
+      <div className="rounded-[1.8rem] border border-white/8 bg-[#0b0b0b] p-6">
         <EmptyState
           title="No projects yet"
           description="Your generated sites will appear here after you create your first project."
@@ -306,50 +321,52 @@ const ProjectGrid = () => {
   }
 
   return (
-    <div className="glass-panel rounded-[2rem] border border-border/60 p-5 shadow-[0_24px_80px_-46px_rgba(0,0,0,0.72)] sm:p-6">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="rounded-[2rem] border border-white/8 bg-[#060606] p-5 sm:p-6">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-            Workspace memory
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-foreground">
-            Recent Projects
-          </h2>
+          <p className="text-xs uppercase tracking-[0.2em] text-white/45">Recent projects</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-white">Continue where you left off</h2>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Reopen a concept and keep refining from where you left off.
+        <p className="max-w-md text-sm leading-6 text-white/55">
+          Reopen a concept, inspect the canvas, and keep refining without starting over.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {projects.map((project, index) => (
           <Link
             key={project.id}
             href={`/project/${project.slugId}`}
-            className="group overflow-hidden rounded-[1.6rem] border border-border/60 bg-background/75 transition duration-300 hover:-translate-y-1 hover:border-primary/35"
+            className="group overflow-hidden rounded-[1.4rem] border border-white/8 bg-[#0d0d0d] transition duration-300 hover:-translate-y-1 hover:border-white/18"
           >
-            <div className="relative aspect-[4/3] overflow-hidden border-b border-border/60">
-              <div className="absolute inset-0 bg-linear-to-br from-primary/16 via-transparent to-chart-2/14" />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_32%)]" />
-              <div className="absolute inset-6 flex flex-col justify-between">
-                <span className="w-fit rounded-full border border-border/70 bg-background/75 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-                  Concept 0{(index % 9) + 1}
-                </span>
-                <div className="flex items-end justify-between gap-3">
-                  <span className="text-5xl font-semibold tracking-[-0.08em] text-foreground/85">
-                    {project.title.charAt(0)}
+            <div className="relative aspect-[4/3] overflow-hidden border-b border-white/8 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_38%),linear-gradient(180deg,#171717_0%,#070707_100%)]">
+              <div className="absolute inset-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white/55">
+                    Concept 0{(index % 9) + 1}
                   </span>
-                  <ArrowUpRight className="size-5 text-muted-foreground transition group-hover:text-primary" />
+                  <Layers3 className="size-4 text-white/75" />
+                </div>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-white/45">
+                      {new Date(project.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                    <span className="mt-3 block text-5xl font-semibold tracking-[-0.08em] text-white/90">
+                      {project.title.charAt(0)}
+                    </span>
+                  </div>
+                  <ArrowUpRight className="size-5 text-white/40 transition group-hover:text-white" />
                 </div>
               </div>
             </div>
             <div className="space-y-2 p-4">
-              <h3 className="truncate text-base font-medium tracking-[-0.03em] text-foreground">
-                {project.title}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Open the canvas, inspect pages, and continue prompting.
-              </p>
+              <h3 className="truncate text-base font-medium tracking-[-0.03em] text-white">{project.title}</h3>
+              <p className="text-sm leading-6 text-white/55">Open the conversation and keep refining the direction.</p>
             </div>
           </Link>
         ))}
@@ -359,16 +376,16 @@ const ProjectGrid = () => {
 };
 
 const ProjectGridSkeleton = () => (
-  <div className="glass-panel animate-pulse rounded-[2rem] border border-border/60 p-6 shadow-[0_24px_80px_-46px_rgba(0,0,0,0.72)]">
-    <div className="h-3 w-32 rounded bg-muted" />
-    <div className="mt-3 h-8 w-56 rounded bg-muted" />
-    <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div className="rounded-[2rem] border border-white/8 bg-[#060606] p-6">
+    <div className="h-3 w-32 rounded bg-white/8" />
+    <div className="mt-3 h-8 w-56 rounded bg-white/8" />
+    <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="overflow-hidden rounded-[1.6rem] border border-border/60">
-          <div className="aspect-[4/3] bg-muted" />
+        <div key={i} className="overflow-hidden rounded-[1.4rem] border border-white/8">
+          <div className="aspect-[4/3] bg-white/6" />
           <div className="space-y-3 p-4">
-            <div className="h-5 w-32 rounded bg-muted" />
-            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-5 w-32 rounded bg-white/8" />
+            <div className="h-4 w-full rounded bg-white/8" />
           </div>
         </div>
       ))}

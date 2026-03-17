@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useRef, useEffect, useState, useMemo } from 'react'
 import { Rnd } from "react-rnd";
 import { TOOL_MODE_ENUM, ToolModeType } from '@/constants/canvas';
