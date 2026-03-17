@@ -18,6 +18,11 @@ type ColorToken = {
   value: string
 }
 
+const getPreferredViewport = (page: Pick<PageType, "metadata">) => {
+  const viewports = page.metadata?.viewports ?? []
+  return viewports.find((viewport) => viewport.id === "desktop") ?? viewports[0]
+}
+
 type PropsType = {
   page: PageType
   layout: { x: number; y: number; width: number; height: number };
@@ -63,7 +68,7 @@ const PageFrame = ({
     page.name, page.rootStyles, page.id
   )
   const isSelected = selectedPageId === page.id
-  const primaryViewport = page.metadata?.viewports?.[0]
+  const primaryViewport = getPreferredViewport(page)
   const isMobileViewport = Boolean(primaryViewport && primaryViewport.width <= 430)
 
   useEffect(() => {

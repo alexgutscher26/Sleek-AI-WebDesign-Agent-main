@@ -246,6 +246,9 @@ For each page, provide a developer-ready layout directive using:
 - lucide:[icon-name] format for icons
 - border: dark background border should be very subtle while light background border-[var(--border)]
 - If generation mode is mobile-app: describe a true handheld app screen, not a browser page or marketing site. Use full-screen mobile composition, touch-friendly spacing, and native app regions like status area, top app bar, bottom tab bar, cards, lists, and sheets. Do not describe a centered phone mockup inside a larger webpage.
+- If generation mode is mobile-app: every page must read like a shippable native screen with clear primary regions, intentional spacing, and complete component styling. Avoid sparse text floating in open space.
+- Mobile app analysis must specify concrete screen structure such as header, summary module, content modules, bottom actions, and navigation when relevant.
+- In mobile app mode, prefer tappable pills, icon buttons, segmented controls, cards, list rows, and sheet-like panels instead of plain links or desktop nav patterns.
 
 EXAMPLE OF HIGH-FIDELITY WEB DESCRIPTION:
 "Root: bg-[var(--background)] with a massive radial-gradient light-leak using rgba(var(--primary-rgb),0.1) at top-right.
@@ -306,7 +309,8 @@ Your work adapts to the specific brand mood—from Apple-clean and Notion-minima
 1. Output HTML ONLY - Start immediately with <div. NO markdown formatting, NO code fences (\`\`\`), NO explanations.
 2. GRID RULES:
    - Web surfaces: Use 'grid grid-cols-12 gap-6' for main layouts. Master 'col-span-X' for visual hierarchy.
-   - Mobile-app surfaces: Prefer a true mobile screen structure with a single-column stack, occasional 2-column mini-grids, and touch-first spacing. Do not force desktop-style 12-column website composition.
+- Mobile-app surfaces: Prefer a true mobile screen structure with a single-column stack, occasional 2-column mini-grids, and touch-first spacing. Do not force desktop-style 12-column website composition.
+- Mobile-app surfaces must feel dense enough to be useful on first render. Avoid leaving large empty gaps between elements unless the concept explicitly calls for it.
 3. THEMING SAFETY & VARIABLE PURITY (MANDATORY):
    - COLORS: NEVER use Tailwind absolute colors like 'bg-blue-500', 'text-zinc-900', or 'bg-white'.
    - MAPPING: Use ONLY these mapped variables:
@@ -396,6 +400,11 @@ Your work adapts to the specific brand mood—from Apple-clean and Notion-minima
 - Think in screens, not pages: dashboard screen, habits screen, settings screen, onboarding screen, etc.
 - Favor stacked cards, segmented controls, bottom tabs, floating actions, sheets, progress rings, compact charts, list rows, and touch targets.
 - Keep widths fluid and screen-native: avoid \`max-w-6xl\`, \`max-w-7xl\`, or giant centered wrappers in mobile-app mode.
+- Do not output bare anchor text that looks like default browser links. Mobile navigation items must be styled as tabs, chips, icon buttons, or list rows.
+- Mobile typography must be deliberate: app title around text-2xl to text-4xl, section labels around text-xs to text-sm, key metrics clearly larger than body copy.
+- Use a real mobile layout scaffold near the top of the page: a status/header region, one high-emphasis content block above the fold, and supporting modules below it.
+- For weather, finance, health, productivity, or dashboard-like apps, ensure the first screen includes both summary information and structured secondary modules rather than a single illustration floating in whitespace.
+- Maintain a tight mobile spacing rhythm. Typical vertical gaps should feel like 12px, 16px, 20px, 24px, or 32px instead of arbitrary large voids.
 
 
 # LINK RULES - CRITICAL

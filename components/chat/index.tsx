@@ -81,7 +81,8 @@ const PROMPT_HISTORY_MERGE_WINDOW_MS = 900
 const MAX_HISTORY_ENTRIES = 100
 
 const getDefaultPageLayout = (page: PageType | Pick<PageType, "metadata"> | undefined, index: number): CanvasPageLayout => {
-  const viewport = page?.metadata?.viewports?.[0]
+  const viewports = page?.metadata?.viewports ?? []
+  const viewport = viewports.find((entry) => entry.id === "desktop") ?? viewports[0]
 
   if (viewport) {
     return {
@@ -446,6 +447,11 @@ const ChatInterface = ({
   // Sync messages when data is initially loaded
   // We use a ref to track the last synced slugId to ensure we only sync once per project,
   const lastSyncedSlug = useRef<string | null>(null);
+  const { selectedPageId, setSelectedPageId } = useCanvas()
+  const historyMetaRef = useRef<{ lastKind: string | null; lastAt: number }>({
+    lastKind: null,
+    lastAt: 0,
+  })
 
   useEffect(() => {
       if (projectData && slugId !== lastSyncedSlug.current) {
@@ -469,12 +475,17 @@ const ChatInterface = ({
       if (window.location.pathname === "/" && (hasStarted || isProjectPage)) {
         setSlugId(generateSlugId());
         setMessages([])
+        setPages([])
         setHasStarted(false)
+        setInput("")
         setProjectTitle(null)
         setPageLayouts({})
         setToolMode(TOOL_MODE_ENUM.SELECT)
         setPastSnapshots([])
         setFutureSnapshots([])
+        setActiveCompactPane("chat")
+        lastSyncedSlug.current = null
+        void setSelectedPageId(null)
       }
     }
 
@@ -487,13 +498,8 @@ const ChatInterface = ({
     return () => window.removeEventListener("popstate",
       checkReset
     )
-  }, [pathname, hasStarted, isProjectPage, setMessages])
+  }, [pathname, hasStarted, isProjectPage, setMessages, setSelectedPageId])
 
-  const { selectedPageId, setSelectedPageId } = useCanvas()
-  const historyMetaRef = useRef<{ lastKind: string | null; lastAt: number }>({
-    lastKind: null,
-    lastAt: 0,
-  })
   const currentSnapshotRef = useRef<EditorSnapshot>({
     input: "",
     selectedPageId: null,
@@ -502,6 +508,27 @@ const ChatInterface = ({
   })
 
   const isLoading = status === "submitted" || status === "streaming"
+
+  useEffect(() => {
+    if (!isProjectPage || !propSlugId || slugId === propSlugId) {
+      return
+    }
+
+    setSlugId(propSlugId)
+    setMessages([])
+    setPages([])
+    setInput("")
+    setProjectTitle(null)
+    setPageLayouts({})
+    setToolMode(TOOL_MODE_ENUM.SELECT)
+    setPastSnapshots([])
+    setFutureSnapshots([])
+    setActiveCompactPane("chat")
+    lastSyncedSlug.current = null
+    historyMetaRef.current = { lastKind: null, lastAt: 0 }
+    void setSelectedPageId(null)
+  }, [isProjectPage, propSlugId, setMessages, setSelectedPageId, slugId])
+
   const captureSnapshot = (
     overrides: Partial<EditorSnapshot> = {}
   ): EditorSnapshot => ({
@@ -662,11 +689,16 @@ const ChatInterface = ({
       setSlugId(generateSlugId());
       setHasStarted(false);
       setMessages([]);
+      setPages([])
+      setInput("")
       setProjectTitle(null)
       setPageLayouts({})
       setToolMode(TOOL_MODE_ENUM.SELECT)
       setPastSnapshots([])
       setFutureSnapshots([])
+      setActiveCompactPane("chat")
+      lastSyncedSlug.current = null
+      void setSelectedPageId(null)
     }
     router.push("/");
   }

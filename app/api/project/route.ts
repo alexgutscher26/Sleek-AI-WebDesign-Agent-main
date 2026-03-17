@@ -225,9 +225,9 @@ const buildProjectMetadata = (settings: {
 })
 
 const DEFAULT_WEB_VIEWPORTS: NonNullable<PageMetadata["viewports"]> = [
-  { id: "mobile", label: "Mobile", width: 390, height: 844 },
+  { id: "desktop", label: "Desktop", width: 1440, height: 1024 },
   { id: "tablet", label: "Tablet", width: 834, height: 1112 },
-  { id: "desktop", label: "Desktop", width: 1440, height: 1024 }
+  { id: "mobile", label: "Mobile", width: 390, height: 844 }
 ]
 
 const MOBILE_APP_VIEWPORTS: Record<GenerationPlatform, NonNullable<PageMetadata["viewports"]>> = {

@@ -83,8 +83,12 @@ export function getHTMLWrapper(
     :root {${safeRootStyles}${safeRootStyles ? ";" : ""}${FONT_VARIABLES}${BASE_VARIABLES}}
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {width:100%;min-height:100%;}
-    body {font-family:var(--font-sans);background:var(--background);color:var(--foreground);-webkit-font-smoothing:antialiased;}
+    body {font-family:var(--font-sans);background:var(--background);color:var(--foreground);line-height:1.45;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
     #root {width:100%;min-height:100vh;}
+    #content {width:100%;min-height:100vh;}
+    a {color:inherit;text-decoration:none;}
+    button, input, textarea, select {font:inherit;color:inherit;}
+    img, svg, video, canvas {display:block;max-width:100%;}
     * {scrollbar-width:none;-ms-overflow-style:none;}
     *::-webkit-scrollbar {display:none;}
 

@@ -10,7 +10,7 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https:",
   "style-src 'self' 'unsafe-inline' https:",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://cdn.tailwindcss.com https://code.iconify.design",
   "connect-src 'self' https: wss:",
   "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com",
   "worker-src 'self' blob:",

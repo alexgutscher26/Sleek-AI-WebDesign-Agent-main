@@ -28,7 +28,8 @@ type PropsType = {
 }
 
 const getDefaultPageLayout = (page: PageType | Pick<PageType, "metadata"> | undefined, index: number): CanvasPageLayout => {
-  const viewport = page?.metadata?.viewports?.[0]
+  const viewports = page?.metadata?.viewports ?? []
+  const viewport = viewports.find((entry) => entry.id === "desktop") ?? viewports[0]
 
   if (viewport) {
     return {
