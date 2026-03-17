@@ -6,6 +6,7 @@ import { UIMessage } from "ai"
 import { parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation"
 import { getOwnedProjectBySlug } from "@/lib/project-access"
 import { assertTrustedServerActionRequest } from "@/lib/request-security"
+import { writeAuditLog } from "@/lib/audit-log"
 import type { PageMetadata, PageType } from "@/types/project"
 
 type CompatClient = Awaited<ReturnType<typeof getAuthServer>>["insforge"]
@@ -126,6 +127,17 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
       p_project_id: project.id
     })
 
+    await writeAuditLog({
+      userId: user.id,
+      action: "page.delete",
+      entityType: "page",
+      entityId: pageId,
+      projectId: project.id,
+      metadata: {
+        slugId: parsedSlugId
+      }
+    })
+
     return { success: true }
   } catch (error) {
     if (error instanceof RequestValidationError) {
@@ -169,6 +181,18 @@ export const renamePageAction = async (slugId: string, pageId: string, name: str
     if (error || !page) {
       return { error: "Failed to rename page" }
     }
+
+    await writeAuditLog({
+      userId: user.id,
+      action: "page.rename",
+      entityType: "page",
+      entityId: pageId,
+      projectId: project.id,
+      metadata: {
+        slugId: parsedSlugId,
+        nextName: trimmedName
+      }
+    })
 
     return { success: true, data: page }
   } catch (error) {
@@ -260,6 +284,20 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
       p_page_ids: orderedPageIds
     })
 
+    await writeAuditLog({
+      userId: user.id,
+      action: "page.duplicate",
+      entityType: "page",
+      entityId: duplicatedPage.id,
+      projectId: project.id,
+      metadata: {
+        slugId: parsedSlugId,
+        sourcePageId: pageId,
+        sourcePageName: sourcePage.name,
+        duplicatedPageName: duplicatedPage.name
+      }
+    })
+
     return {
       success: true,
       data: {
@@ -301,6 +339,18 @@ export const reorderPagesAction = async (slugId: string, orderedPageIds: string[
       p_user_id: user.id,
       p_project_id: project.id,
       p_page_ids: normalizedPageIds
+    })
+
+    await writeAuditLog({
+      userId: user.id,
+      action: "page.reorder",
+      entityType: "page",
+      entityId: normalizedPageIds[0] ?? "batch",
+      projectId: project.id,
+      metadata: {
+        slugId: parsedSlugId,
+        orderedPageIds: normalizedPageIds
+      }
     })
 
     return { success: true }

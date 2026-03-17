@@ -151,29 +151,65 @@ const focusChatInput = () => {
   return true
 }
 
-const fileToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result ?? ""));
-  reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-  reader.readAsDataURL(blob);
-})
+const uploadFileWithSignedUrl = async (file: PromptInputMessage["files"][number]) => {
+  const response = await fetch(file.url)
+  const blob = await response.blob()
+
+  const initResponse = await fetch("/api/upload/init", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      filename: file.filename,
+      mediaType: file.mediaType,
+      size: blob.size
+    })
+  })
+
+  const initPayload = await initResponse.json().catch(() => null) as {
+    success?: boolean
+    data?: { uploadUrl?: string }
+    error?: { message?: string }
+  } | null
+
+  if (!initResponse.ok || !initPayload?.data?.uploadUrl) {
+    throw new Error(initPayload?.error?.message || "Failed to initialize file upload.")
+  }
+
+  const uploadResponse = await fetch(initPayload.data.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.mediaType
+    },
+    body: blob
+  })
+
+  const uploadPayload = await uploadResponse.json().catch(() => null) as {
+    success?: boolean
+    data?: {
+      file?: {
+        url?: string
+        size?: number
+      }
+    }
+    error?: { message?: string }
+  } | null
+
+  if (!uploadResponse.ok || !uploadPayload?.data?.file?.url) {
+    throw new Error(uploadPayload?.error?.message || "Failed to upload file.")
+  }
+
+  return {
+    ...file,
+    size: uploadPayload.data.file.size ?? blob.size,
+    url: uploadPayload.data.file.url
+  }
+}
 
 const serializeFilesForTransport = async (files: PromptInputMessage["files"]) => {
   return Promise.all(
-    files.map(async (file) => {
-      if (file.url.startsWith("data:")) {
-        return file
-      }
-
-      const response = await fetch(file.url)
-      const blob = await response.blob()
-
-      return {
-        ...file,
-        size: blob.size,
-        url: await fileToDataUrl(blob)
-      }
-    })
+    files.map((file) => uploadFileWithSignedUrl(file))
   )
 }
 

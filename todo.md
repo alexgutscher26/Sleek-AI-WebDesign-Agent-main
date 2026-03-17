@@ -41,12 +41,12 @@
 - [x] Add abuse prevention for repeated regenerate spam
 - [x] Add CSRF strategy for sensitive server actions
 - [x] Add Content Security Policy headers
-- [ ] Add clickjacking/XSS protection headers
-- [ ] Add secure cookie settings verification
-- [ ] Add audit logs for delete/update actions
-- [ ] Add signed URL flow for file uploads
-- [ ] Add prompt injection detection and mitigation rules
-- [ ] Add model output sanitization before persistence
+- [x] Add clickjacking/XSS protection headers
+- [x] Add secure cookie settings verification
+- [x] Add audit logs for delete/update actions
+- [x] Add signed URL flow for file uploads
+- [x] Add prompt injection detection and mitigation rules
+- [x] Add model output sanitization before persistence
 - [ ] Add role-based access controls for future team workspaces
 - [ ] Add privacy retention policy for prompts/images
 - [ ] Add secure deletion workflow for user data

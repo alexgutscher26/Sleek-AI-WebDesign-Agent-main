@@ -123,3 +123,44 @@ export function verifyInlineFilePayload(
     byteLength: bytes.byteLength
   }
 }
+
+export function verifyBinaryFilePayload(
+  bytes: Uint8Array,
+  mediaType: string,
+  expectedSize?: number
+): FileSignatureCheck {
+  if (!ALLOWED_FILE_MIME_TYPE_SET.has(mediaType as (typeof ALLOWED_FILE_MIME_TYPES)[number])) {
+    return {
+      ok: false,
+      message: "Unsupported uploaded file type."
+    }
+  }
+
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_FILE_SIZE_BYTES) {
+    return {
+      ok: false,
+      message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`
+    }
+  }
+
+  if (typeof expectedSize === "number" && expectedSize !== bytes.byteLength) {
+    return {
+      ok: false,
+      message: "Uploaded file size metadata does not match the payload."
+    }
+  }
+
+  const sniffedMimeType = sniffMimeType(bytes)
+
+  if (sniffedMimeType !== mediaType) {
+    return {
+      ok: false,
+      message: "Uploaded file content does not match the declared file type."
+    }
+  }
+
+  return {
+    ok: true,
+    byteLength: bytes.byteLength
+  }
+}
