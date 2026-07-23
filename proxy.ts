@@ -10,9 +10,9 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https:",
   "style-src 'self' 'unsafe-inline' https:",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://cdn.tailwindcss.com https://code.iconify.design",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://cdn.tailwindcss.com https://code.iconify.design https://kudoswall.org https://*.kudoswall.org",
   "connect-src 'self' https: wss:",
-  "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com",
+  "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://kudoswall.org https://*.kudoswall.org",
   "worker-src 'self' blob:",
   "upgrade-insecure-requests",
 ].join("; ");

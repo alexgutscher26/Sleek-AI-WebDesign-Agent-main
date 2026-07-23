@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, Play, Plus, Minus, Twitter, Linkedin, Github, ArrowRight, Zap, Palette, Clock, ArrowUp, RefreshCw } from "lucide-react";
@@ -124,6 +124,51 @@ function FAQItem({ item }: { item: typeof FAQ_ITEMS[0] }) {
   );
 }
 
+function KudosWallWidget() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    containerRef.current.innerHTML = "";
+
+    const script = document.createElement("script");
+    script.src = "https://kudoswall.org/widget.js";
+    script.setAttribute("data-id", "339b232f-0807-4f03-a0b2-14df76513e8e");
+    script.setAttribute("data-theme", "dark");
+    script.setAttribute("data-mode", "dark");
+    script.async = true;
+
+    containerRef.current.appendChild(script);
+  }, []);
+
+  return (
+    <div className="w-full">
+      <style>{`
+        [data-kudoswall-id] iframe,
+        [data-kudoswall-id] > div,
+        iframe[src*="kudoswall"] {
+          filter: invert(1) hue-rotate(180deg) !important;
+          border-radius: 1rem !important;
+          background-color: transparent !important;
+          max-width: 100% !important;
+        }
+        [data-kudoswall-id] img,
+        [data-kudoswall-id] svg {
+          filter: invert(1) hue-rotate(180deg) !important;
+        }
+      `}</style>
+      <div
+        ref={containerRef}
+        data-kudoswall-id="339b232f-0807-4f03-a0b2-14df76513e8e"
+        data-theme="dark"
+        data-mode="dark"
+        className="w-full min-h-[200px]"
+      />
+    </div>
+  );
+}
+
 export default function LandingPage() {
   const router = useRouter();
   const { isSignedIn } = useAuth();
@@ -189,7 +234,7 @@ export default function LandingPage() {
   const [email, setEmail] = useState("");
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden" style={{ fontFamily: "var(--font-geist-sans)" }}>
+    <div className="min-h-screen bg-[#0a0a0a] text-white" style={{ fontFamily: "var(--font-geist-sans)" }}>
       {/* Ambient top glow */}
       <div className="pointer-events-none fixed inset-0 z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full bg-orange-600/8 blur-[140px]" />
@@ -368,25 +413,18 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* TESTIMONIAL */}
-      <section className="relative z-10 max-w-3xl mx-auto px-6 py-16 text-center">
-        <p className="text-xl md:text-2xl font-light italic text-white/70 leading-relaxed mb-8">
-          "I skipped Figma entirely. I just{" "}
-          <span className="text-white not-italic font-medium">described my dashboard in the chat</span>
-          {" "}and Sleek generated the whole thing — sidebar, charts, tables —{" "}
-          <em className="text-orange-400">ready to drop into my codebase</em>. We shipped a week ahead of schedule."
-        </p>
-        <div className="flex items-center justify-center gap-3">
-          <div className="flex -space-x-2">
-            {["#f97316","#818cf8","#22c55e"].map((c,i)=>(
-              <div key={i} className="w-8 h-8 rounded-full border-2 border-[#0a0a0a]" style={{ backgroundColor: c }} />
-            ))}
+      {/* KUDOSWALL SOCIAL PROOF WIDGET */}
+      <section className="relative z-10 max-w-5xl mx-auto px-6 py-16">
+        <div className="text-center mb-10">
+          <div className="text-xs uppercase tracking-widest text-orange-500/70 mb-3">Wall of Love</div>
+          <h2 className="text-3xl md:text-4xl font-bold">What our <span className="text-orange-500">customers</span> say</h2>
+          <p className="text-white/40 max-w-xl mx-auto text-sm leading-relaxed mt-2">Real feedback from founders and developers shipping with Sleek.</p>
+        </div>
+        <div className="relative rounded-3xl overflow-hidden border border-white/8 bg-[#0d0d0d] p-6 md:p-10 shadow-2xl">
+          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: "linear-gradient(rgba(255,107,43,0.04) 1px, transparent 1px), linear-gradient(to right, rgba(255,107,43,0.04) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+          <div className="relative z-10">
+            <KudosWallWidget />
           </div>
-          <div className="text-left">
-            <div className="text-sm font-medium text-white">Marcus T., Indie Developer</div>
-            <div className="text-xs text-white/40">Solo founder · shipped last month</div>
-          </div>
-          <div className="ml-3 flex gap-0.5 text-orange-400 text-sm">★★★★★</div>
         </div>
       </section>
 

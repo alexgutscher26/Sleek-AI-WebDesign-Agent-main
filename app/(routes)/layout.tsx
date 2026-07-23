@@ -5,7 +5,7 @@ export default function HomeLayout({
 }>) {
   return (
     <main>
-      <div className="overflow-hidden">{children}</div>
+      {children}
     </main>
   );
 }
