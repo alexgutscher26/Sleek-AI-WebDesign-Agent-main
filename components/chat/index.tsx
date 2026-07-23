@@ -226,14 +226,60 @@ const ChatInterface = ({
     || generateSlugId())
 
 
-  const [input, setInput] = useState("")
-  const [contentDepth, setContentDepth] = useState<ContentDepth>(DEFAULT_CONTENT_DEPTH)
-  const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>(DEFAULT_CREATIVITY_LEVEL)
-  const [generationPlatform, setGenerationPlatform] = useState<GenerationPlatform>(DEFAULT_GENERATION_PLATFORM)
-  const [generationMode, setGenerationMode] = useState<GenerationMode>(DEFAULT_GENERATION_MODE)
+  const [input, setInput] = useState(() => {
+    try {
+      const raw = localStorage.getItem("sleek_landing_seed");
+      if (raw) return (JSON.parse(raw) as { prompt?: string }).prompt ?? "";
+    } catch {}
+    return "";
+  })
+  const [contentDepth, setContentDepth] = useState<ContentDepth>(() => {
+    try {
+      const raw = localStorage.getItem("sleek_landing_seed");
+      if (raw) return (JSON.parse(raw) as { contentDepth?: ContentDepth }).contentDepth ?? DEFAULT_CONTENT_DEPTH;
+    } catch {}
+    return DEFAULT_CONTENT_DEPTH;
+  })
+  const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>(() => {
+    try {
+      const raw = localStorage.getItem("sleek_landing_seed");
+      if (raw) return (JSON.parse(raw) as { creativityLevel?: CreativityLevel }).creativityLevel ?? DEFAULT_CREATIVITY_LEVEL;
+    } catch {}
+    return DEFAULT_CREATIVITY_LEVEL;
+  })
+  const [generationPlatform, setGenerationPlatform] = useState<GenerationPlatform>(() => {
+    try {
+      const raw = localStorage.getItem("sleek_landing_seed");
+      if (raw) return (JSON.parse(raw) as { generationPlatform?: GenerationPlatform }).generationPlatform ?? DEFAULT_GENERATION_PLATFORM;
+    } catch {}
+    return DEFAULT_GENERATION_PLATFORM;
+  })
+  const [generationMode, setGenerationMode] = useState<GenerationMode>(() => {
+    try {
+      const raw = localStorage.getItem("sleek_landing_seed");
+      if (raw) return (JSON.parse(raw) as { generationMode?: GenerationMode }).generationMode ?? DEFAULT_GENERATION_MODE;
+    } catch {}
+    return DEFAULT_GENERATION_MODE;
+  })
   const [layoutComplexity, setLayoutComplexity] = useState<LayoutComplexity>(DEFAULT_LAYOUT_COMPLEXITY)
-  const [modelProvider, setModelProvider] = useState<ModelProvider>(DEFAULT_MODEL_PROVIDER)
-  const [styleIntensity, setStyleIntensity] = useState<StyleIntensity>(DEFAULT_STYLE_INTENSITY)
+  const [modelProvider, setModelProvider] = useState<ModelProvider>(() => {
+    try {
+      const raw = localStorage.getItem("sleek_landing_seed");
+      if (raw) return (JSON.parse(raw) as { modelProvider?: ModelProvider }).modelProvider ?? DEFAULT_MODEL_PROVIDER;
+    } catch {}
+    return DEFAULT_MODEL_PROVIDER;
+  })
+  const [styleIntensity, setStyleIntensity] = useState<StyleIntensity>(() => {
+    try {
+      const raw = localStorage.getItem("sleek_landing_seed");
+      if (raw) {
+        const seed = JSON.parse(raw) as { styleIntensity?: StyleIntensity };
+        localStorage.removeItem("sleek_landing_seed"); // consume once
+        return seed.styleIntensity ?? DEFAULT_STYLE_INTENSITY;
+      }
+    } catch {}
+    return DEFAULT_STYLE_INTENSITY;
+  })
   const [hasStarted, setHasStarted] = useState(isProjectPage);
   const [projectTitle, setProjectTitle] = useState<string | null>(null)
   const [pages, setPages] = useState<PageType[]>([]);
