@@ -30,7 +30,12 @@ import { DEFAULT_GENERATION_PLATFORM, type GenerationPlatform } from "@/constant
 import { DEFAULT_LAYOUT_COMPLEXITY } from "@/constants/layout-complexity";
 import { type ModelProvider } from "@/constants/model-provider";
 import { DEFAULT_STYLE_INTENSITY } from "@/constants/style-intensity";
-import { createChatCompletionWithRetries, isAbortLikeError } from "@/lib/ai-retry";
+import {
+  createChatCompletionWithRetries,
+  isAbortLikeError,
+  AiProviderUnreachableError,
+  isProviderUnreachableError
+} from "@/lib/ai-retry";
 import { createHash } from "node:crypto";
 import { extractPrimaryHtml, sanitizeGeneratedHtml } from "@/lib/html-guardrails";
 import { getClientIp, hashClientIp, mapGenerationRateLimitError, RateLimitError } from "@/lib/generation-abuse";
@@ -426,9 +431,14 @@ const throwIfTimedOut = (timedOut: boolean) => {
   }
 }
 
-const createOperationSignal = (requestSignal: AbortSignal, timeoutMs: number) => {
+const createOperationSignal = (
+  requestSignal: AbortSignal,
+  timeoutMs: number,
+  onWarning?: () => void
+) => {
   const controller = new AbortController()
   let timedOut = false
+  let warned = false
   let cleanedUp = false
 
   const cleanup = () => {
@@ -437,6 +447,7 @@ const createOperationSignal = (requestSignal: AbortSignal, timeoutMs: number) =>
     }
 
     cleanedUp = true
+    clearTimeout(warningTimeoutId)
     clearTimeout(timeoutId)
     requestSignal.removeEventListener("abort", onAbort)
   }
@@ -452,6 +463,15 @@ const createOperationSignal = (requestSignal: AbortSignal, timeoutMs: number) =>
   }
 
   const onAbort = () => abortWith("request")
+
+  const warningMs = Math.floor(timeoutMs * 0.75)
+  const warningTimeoutId = setTimeout(() => {
+    if (!controller.signal.aborted && !cleanedUp) {
+      warned = true
+      onWarning?.()
+    }
+  }, warningMs)
+
   const timeoutId = setTimeout(() => abortWith("timeout"), timeoutMs)
 
   if (requestSignal.aborted) {
@@ -463,7 +483,38 @@ const createOperationSignal = (requestSignal: AbortSignal, timeoutMs: number) =>
   return {
     signal: controller.signal,
     cleanup,
-    didTimeOut: () => timedOut
+    didTimeOut: () => timedOut,
+    didWarn: () => warned
+  }
+}
+
+const startStreamHeartbeat = (writer: StreamWriter, signal: AbortSignal, intervalMs = 15000) => {
+  let lastWriteTime = Date.now()
+
+  const markActivity = () => {
+    lastWriteTime = Date.now()
+  }
+
+  const intervalId = setInterval(() => {
+    if (signal.aborted) {
+      clearInterval(intervalId)
+      return
+    }
+
+    if (Date.now() - lastWriteTime >= intervalMs) {
+      try {
+        emit(writer, "heartbeat", { timestamp: Date.now() }, { transient: true })
+        lastWriteTime = Date.now()
+      } catch (err) {
+        console.warn("[Stream Heartbeat] Zombie connection detected, stopping stream writer:", err)
+        clearInterval(intervalId)
+      }
+    }
+  }, intervalMs)
+
+  return {
+    markActivity,
+    stop: () => clearInterval(intervalId)
   }
 }
 
@@ -1279,7 +1330,47 @@ const persistGeneratedState = async (
     throw error
   }
 
+const ensureUniquePagePositions = async (insforge: RouteInsforge, projectId: string) => {
+  try {
+    const { data: pages } = await insforge.database
+      .from<Array<Pick<PersistedPage, "id" | "position">>>("pages")
+      .select("id, position")
+      .eq("projectId", projectId)
+      .order("position", { ascending: true })
+
+    if (!pages || pages.length <= 1) {
+      return
+    }
+
+    let hasDuplicatesOrGaps = false
+    const positionsSeen = new Set<number>()
+
+    for (let i = 0; i < pages.length; i += 1) {
+      const pos = pages[i].position
+      if (typeof pos !== "number" || pos !== i || positionsSeen.has(pos)) {
+        hasDuplicatesOrGaps = true
+        break
+      }
+      positionsSeen.add(pos)
+    }
+
+    if (hasDuplicatesOrGaps) {
+      await Promise.all(
+        pages.map((page, index) =>
+          insforge.database
+            .from("pages")
+            .update({ position: index })
+            .eq("id", page.id)
+        )
+      )
+    }
+  } catch (err) {
+    console.warn("[Position Deduplication] Error ensuring unique page positions:", err)
+  }
+}
+
   await touchProject(insforge, userId, projectId)
+  await ensureUniquePagePositions(insforge, projectId)
 
   return (savedPages as PersistedPage[]).map((page, index) => ({
     ...page,
@@ -1522,35 +1613,37 @@ async function runGenerationWorker({
     })) ?? [])
   ]
   const generatedDrafts: GeneratedPageDraft[] = []
+  let partialError: unknown = null
 
   for (const page of pages) {
-    throwIfAborted(signal)
+    try {
+      throwIfAborted(signal)
 
-    emit(writer, "generation", {
-      status: "generating",
-      currentPageId: page.id,
-      pages: pages.map((currentPage) => ({
-        id: currentPage.id,
-        name: currentPage.name,
-        done: generatedDrafts.some((draft) => draft.tempId === currentPage.id)
-      }))
-    }, { id: "gen-card" })
+      emit(writer, "generation", {
+        status: "generating",
+        currentPageId: page.id,
+        pages: pages.map((currentPage) => ({
+          id: currentPage.id,
+          name: currentPage.name,
+          done: generatedDrafts.some((draft) => draft.tempId === currentPage.id)
+        }))
+      }, { id: "gen-card" })
 
-    const previousPagesContext = generationPages.length > 0
-      ? generationPages.slice(-2).map((p) => `<!--${p.name}-->\n${p.htmlContent}`).join("\n\n")
-      : "No previous pages";
+      const previousPagesContext = generationPages.length > 0
+        ? generationPages.slice(-2).map((p) => `<!--${p.name}-->\n${p.htmlContent}`).join("\n\n")
+        : "No previous pages";
 
-    const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
-      model: modelStrategy.model,
-      messages: [
-        {
-          role: "system",
-          content: WEB_GENERATION_PROMPT,
-        },
-        {
-          role: "user",
-          content: `
-         GENERATE HTML FOR THE FOLLOWING PAGE:
+      const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
+        model: modelStrategy.model,
+        messages: [
+          {
+            role: "system",
+            content: WEB_GENERATION_PROMPT,
+          },
+          {
+            role: "user",
+            content: `
+          GENERATE HTML FOR THE FOLLOWING PAGE:
 - Content Depth: ${contentDepth}
 - Creativity Level: ${creativityLevel}
 - Generation Mode: ${generationMode}
@@ -1574,7 +1667,7 @@ ${page.rootStyles}
             - All scrollable content must be in inner containers with hidden scrollbars: [&::-webkit-scrollbar]:hidden scrollbar-none
         3. ***Important*** For absolute overlays (maps, modals, etc.):**
             - Use \`relative w-full h-screen\` on the top div of the overlay.
-        4. ***Important*** For regular content:**
+            4. ***Important*** For regular content:**
             - Use \`w-full h-full min-h-screen\` on the top div.
         5. ***Important*** Do not use h-screen on inner content unless absolutely required.**
             - Height must grow with content; content must be fully visible inside an iframe.
@@ -1592,46 +1685,64 @@ ${page.rootStyles}
             - The root should behave like the mobile screen itself, with full-bleed app composition and mobile-native spacing.
             - Avoid max-w-6xl, max-w-7xl, giant centered containers, and desktop navigation patterns.
         Generate the complete, production-ready HTML for "${page.name}" now:`.trim(),
-        }
-      ],
-      webSearch: { enabled: false },
-      maxTokens: GENERATION_MAX_TOKENS
-    }, {
-      fallbackModels: modelStrategy.fallbackModels,
-      signal
-    })
+          }
+        ],
+        webSearch: { enabled: false },
+        maxTokens: GENERATION_MAX_TOKENS
+      }, {
+        fallbackModels: modelStrategy.fallbackModels,
+        signal
+      })
 
-    const htmlContent = prepareGeneratedHtml(result.choices[0]?.message?.content ?? "")
+      const htmlContent = prepareGeneratedHtml(result.choices[0]?.message?.content ?? "")
 
-    const draft = {
-      tempId: page.id,
-      name: page.name,
-      rootStyles: page.rootStyles,
-      htmlContent,
-      metadata: buildPageMetadata(page, { generationMode, generationPlatform })
-    }
-
-    generatedDrafts.push(draft)
-    generationPages.push({
-      name: page.name,
-      htmlContent
-    })
-
-    emit(writer, "page-created", {
-      tempId: page.id,
-      persisted: false,
-      page: {
-        id: page.id,
+      const draft = {
+        tempId: page.id,
         name: page.name,
         rootStyles: page.rootStyles,
         htmlContent,
-        metadata: draft.metadata,
-        isLoading: false
+        metadata: buildPageMetadata(page, { generationMode, generationPlatform })
       }
-    }, { transient: true });
+
+      generatedDrafts.push(draft)
+      generationPages.push({
+        name: page.name,
+        htmlContent
+      })
+
+      emit(writer, "page-created", {
+        tempId: page.id,
+        persisted: false,
+        page: {
+          id: page.id,
+          name: page.name,
+          rootStyles: page.rootStyles,
+          htmlContent,
+          metadata: draft.metadata,
+          isLoading: false
+        }
+      }, { transient: true });
+    } catch (pageError) {
+      if (isAbortLikeError(pageError)) {
+        throw pageError
+      }
+      console.warn(`[Partial Result Recovery] Generation for page "${page.name}" failed:`, pageError)
+      partialError = pageError
+      emit(writer, "partial-recovery", {
+        failedPage: page.name,
+        recoveredPagesCount: generatedDrafts.length
+      }, { transient: true })
+      break
+    }
   }
 
-  const fullSummaryText = buildGenerationSummaryText(pages)
+  if (generatedDrafts.length === 0) {
+    throw partialError ?? new Error("No pages generated")
+  }
+
+  const fullSummaryText = generatedDrafts.length === pages.length
+    ? buildGenerationSummaryText(pages)
+    : `I've generated ${generatedDrafts.length} of ${pages.length} requested pages (${generatedDrafts.map((d) => d.name).join(", ")}). The remaining page encountered an issue, but your completed pages were safely saved.`
 
   const savedPages = await persistGeneratedState(
     { insforge, userId, projectId, latestUserParts },
@@ -2171,6 +2282,7 @@ USER REQUEST: ${latestUserMessage}
         let genCardEmitted = false;
         let hasCommittedWrites = false
         let generationRequestId: string | null = requestState.record?.id ?? null
+        const heartbeat = startStreamHeartbeat(writer, activeOperationSignal.signal)
 
         try {
           emit(writer, "project-title", {
@@ -2488,6 +2600,23 @@ USER REQUEST: ${latestUserMessage}
             return
           }
 
+          if (isProviderUnreachableError(error) || error instanceof AiProviderUnreachableError) {
+            await finishGenerationRequest(
+              insforge,
+              user.id,
+              generationRequestId,
+              "failed",
+              null,
+              "AI provider service is currently unreachable. Please try again shortly."
+            )
+            emit(writer, "generation", { status: "error" }, { id: "gen-card" });
+            writer.write({
+              type: "error",
+              errorText: "AI provider service is currently unreachable. Please try again shortly."
+            })
+            return
+          }
+
           console.log(error)
           const backendUnavailableMessage = getBackendUnavailableMessage(error)
           const aiProviderErrorMessage = getAiProviderErrorMessage(error)
@@ -2503,6 +2632,7 @@ USER REQUEST: ${latestUserMessage}
           emit(writer, "generation", { status: "error" }, { id: "gen-card" });
           writer.write({ type: "error", errorText: aiProviderErrorMessage ?? backendUnavailableMessage ?? "Something went wrong" })
         } finally {
+          heartbeat.stop()
           activeOperationSignal.cleanup()
         }
       }
@@ -2516,6 +2646,13 @@ USER REQUEST: ${latestUserMessage}
     operationSignal?.cleanup()
     if (error instanceof AbortError || isAbortLikeError(error)) {
       return new Response(null, { status: 499 })
+    }
+    if (isProviderUnreachableError(error) || error instanceof AiProviderUnreachableError) {
+      return createErrorResponse(
+        503,
+        "AI_PROVIDER_UNREACHABLE",
+        "AI provider service is currently unreachable. Please try again shortly."
+      )
     }
     if (error instanceof RateLimitError) {
       return Response.json(

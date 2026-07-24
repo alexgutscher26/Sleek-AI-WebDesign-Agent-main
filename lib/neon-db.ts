@@ -7,9 +7,13 @@ const globalState = globalThis as typeof globalThis & {
 
 export function getSql() {
   if (!globalState.__sleek_sql__) {
+    const maxConnections = Number(process.env.POSTGRES_MAX_CONNECTIONS) || 10
     globalState.__sleek_sql__ = postgres(getPlatformConfig().databaseUrl, {
       prepare: false,
-      max: 1
+      max: maxConnections,
+      idle_timeout: 20,
+      connect_timeout: 10,
+      max_lifetime: 60 * 30
     })
   }
 

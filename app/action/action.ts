@@ -1,7 +1,7 @@
 "use server"
 
 import { getAuthServer } from "@/lib/insforge-server"
-import { createChatCompletionWithRetries } from "@/lib/ai-retry"
+import { createChatCompletionWithRetries, isProviderUnreachableError } from "@/lib/ai-retry"
 import { UIMessage } from "ai"
 import { parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation"
 import { getOwnedProjectBySlug } from "@/lib/project-access"
@@ -56,7 +56,11 @@ export const generateProjectTitle = async (message: string, insforgeClient?: Com
     const text = result.choices[0].message.content;
     return text.trim() || "Untitled Project"
   } catch (error) {
-    console.log(error, "Project title error")
+    if (isProviderUnreachableError(error)) {
+      console.warn("[AI Provider Unreachable] Degraded title generation to fallback default title.")
+    } else {
+      console.log(error, "Project title error")
+    }
     return "Untitled Project"
   }
 }

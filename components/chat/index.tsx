@@ -16,6 +16,7 @@ import { PageType } from "@/types/project";
 import { useQuery } from "@tanstack/react-query";
 import { useCanvas } from "@/hooks/use-canvas";
 import { ErrorState } from "../ui/view-state";
+import { SectionErrorBoundary } from "../ui/error-boundary";
 import { DEFAULT_CONTENT_DEPTH, type ContentDepth } from "@/constants/content-depth";
 import { DEFAULT_CREATIVITY_LEVEL, type CreativityLevel } from "@/constants/creativity-level";
 import { DEFAULT_GENERATION_PLATFORM, type GenerationPlatform } from "@/constants/generation-platform";
@@ -425,6 +426,15 @@ const ChatInterface = ({
           });
           break;
         }
+        case "data-heartbeat": {
+          lastStreamEventTimeRef.current = Date.now()
+          break
+        }
+        case "data-stream-warning": {
+          const payload = data as { message?: string } | undefined
+          toast.warning(payload?.message || "Generation is taking longer than expected. Please stand by...")
+          break
+        }
         case "data-generation": {
           const generationData = data as GenerationStreamData | undefined;
           if (generationData?.status === "error") {
@@ -491,14 +501,45 @@ const ChatInterface = ({
     }
   })
 
-  // Sync messages when data is initially loaded
-  // We use a ref to track the last synced slugId to ensure we only sync once per project,
+  const lastStreamEventTimeRef = useRef<number>(0);
+  const lastSubmissionRef = useRef<{
+    message: Parameters<typeof sendMessage>[0]
+    options: Record<string, unknown>
+    idempotencyKey: string
+  } | null>(null)
   const lastSyncedSlug = useRef<string | null>(null);
   const { selectedPageId, setSelectedPageId } = useCanvas()
   const historyMetaRef = useRef<{ lastKind: string | null; lastAt: number }>({
     lastKind: null,
     lastAt: 0,
   })
+
+  useEffect(() => {
+    const handleOnline = () => {
+      if ((status === "streaming" || status === "submitted" || status === "error") && lastSubmissionRef.current) {
+        toast.info("Network restored. Automatically reconnecting stream...")
+        const lastSub = lastSubmissionRef.current
+        lastStreamEventTimeRef.current = Date.now()
+        sendMessage(lastSub.message, {
+          body: {
+            ...lastSub.options,
+            idempotencyKey: lastSub.idempotencyKey,
+            contentDepth,
+            creativityLevel,
+            generationPlatform,
+            generationMode,
+            layoutComplexity,
+            modelProvider,
+            styleIntensity,
+            slugId
+          }
+        })
+      }
+    }
+
+    window.addEventListener("online", handleOnline)
+    return () => window.removeEventListener("online", handleOnline)
+  }, [status, contentDepth, creativityLevel, generationPlatform, generationMode, layoutComplexity, modelProvider, styleIntensity, slugId, sendMessage])
 
   useEffect(() => {
       if (projectData && slugId !== lastSyncedSlug.current) {
@@ -706,6 +747,13 @@ const ChatInterface = ({
     }
 
     const serializedFiles = await serializeFilesForTransport(message.files)
+    const idempotencyKey = (options.idempotencyKey as string | undefined) ?? crypto.randomUUID().replace(/-/g, "_")
+
+    lastSubmissionRef.current = {
+      message: { text: message.text, files: serializedFiles },
+      options,
+      idempotencyKey
+    }
 
     sendMessage(
       {
@@ -715,7 +763,7 @@ const ChatInterface = ({
       {
         body: {
           ...options,
-          idempotencyKey: crypto.randomUUID().replace(/-/g, "_"),
+          idempotencyKey,
           contentDepth,
           creativityLevel,
           generationPlatform,
@@ -829,28 +877,30 @@ const ChatInterface = ({
 
   if (!isProjectPage && !hasStarted) {
     return (
-      <NewProjectChat
-        input={input}
-        setInput={handleInputChange}
-        contentDepth={contentDepth}
-        creativityLevel={creativityLevel}
-        generationPlatform={generationPlatform}
-        generationMode={generationMode}
-        layoutComplexity={layoutComplexity}
-        modelProvider={modelProvider}
-        styleIntensity={styleIntensity}
-        setContentDepth={setContentDepth}
-        setCreativityLevel={setCreativityLevel}
-        setGenerationPlatform={setGenerationPlatform}
-        setGenerationMode={setGenerationMode}
-        setLayoutComplexity={setLayoutComplexity}
-        setModelProvider={setModelProvider}
-        setStyleIntensity={setStyleIntensity}
-        isLoading={isLoading}
-        status={status}
-        onStop={stop}
-        onSubmit={onSubmit}
-      />
+      <SectionErrorBoundary sectionName="New Project Chat">
+        <NewProjectChat
+          input={input}
+          setInput={handleInputChange}
+          contentDepth={contentDepth}
+          creativityLevel={creativityLevel}
+          generationPlatform={generationPlatform}
+          generationMode={generationMode}
+          layoutComplexity={layoutComplexity}
+          modelProvider={modelProvider}
+          styleIntensity={styleIntensity}
+          setContentDepth={setContentDepth}
+          setCreativityLevel={setCreativityLevel}
+          setGenerationPlatform={setGenerationPlatform}
+          setGenerationMode={setGenerationMode}
+          setLayoutComplexity={setLayoutComplexity}
+          setModelProvider={setModelProvider}
+          setStyleIntensity={setStyleIntensity}
+          isLoading={isLoading}
+          status={status}
+          onStop={stop}
+          onSubmit={onSubmit}
+        />
+      </SectionErrorBoundary>
     )
   }
 
@@ -922,55 +972,59 @@ const ChatInterface = ({
           </div>
         </div>
 
-        <ChatPanel
-          className="h-full pt-12 md:pt-13"
-          messages={messages}
-          input={input}
-          setInput={handleInputChange}
-          contentDepth={contentDepth}
-          creativityLevel={creativityLevel}
-          generationPlatform={generationPlatform}
-          generationMode={generationMode}
-          layoutComplexity={layoutComplexity}
-          modelProvider={modelProvider}
-          styleIntensity={styleIntensity}
-          setContentDepth={setContentDepth}
-          setCreativityLevel={setCreativityLevel}
-          setGenerationPlatform={setGenerationPlatform}
-          setGenerationMode={setGenerationMode}
-          setLayoutComplexity={setLayoutComplexity}
-          setModelProvider={setModelProvider}
-          setStyleIntensity={setStyleIntensity}
-          isLoading={isLoading}
-          isProjectLoading={isProjectLoading}
-          selectedPage={selectedPage}
-          status={status}
-          error={error}
-          onClearSelectedPage={() => updateSelectedPage(null, "page-selection-clear")}
-          onStop={stop}
-          onSubmit={onSubmit}
-        />
+        <SectionErrorBoundary sectionName="Chat Panel">
+          <ChatPanel
+            className="h-full pt-12 md:pt-13"
+            messages={messages}
+            input={input}
+            setInput={handleInputChange}
+            contentDepth={contentDepth}
+            creativityLevel={creativityLevel}
+            generationPlatform={generationPlatform}
+            generationMode={generationMode}
+            layoutComplexity={layoutComplexity}
+            modelProvider={modelProvider}
+            styleIntensity={styleIntensity}
+            setContentDepth={setContentDepth}
+            setCreativityLevel={setCreativityLevel}
+            setGenerationPlatform={setGenerationPlatform}
+            setGenerationMode={setGenerationMode}
+            setLayoutComplexity={setLayoutComplexity}
+            setModelProvider={setModelProvider}
+            setStyleIntensity={setStyleIntensity}
+            isLoading={isLoading}
+            isProjectLoading={isProjectLoading}
+            selectedPage={selectedPage}
+            status={status}
+            error={error}
+            onClearSelectedPage={() => updateSelectedPage(null, "page-selection-clear")}
+            onStop={stop}
+            onSubmit={onSubmit}
+          />
+        </SectionErrorBoundary>
       </div>
 
       <div
         className={`min-h-0 min-w-0 bg-background lg:flex-1
         ${activeCompactPane === "chat" ? "hidden md:block" : "block"}`}
       >
-        <Canvas
-          pages={pages}
-          setPages={setPages}
-          slugId={slugId}
-          isProjectLoading={isProjectLoading}
-          pageLayouts={pageLayouts}
-          selectedPageId={selectedPageId}
-          setSelectedPageId={(pageId) => updateSelectedPage(pageId)}
-          toolMode={toolMode}
-          setToolMode={updateToolMode}
-          onPageLayoutCommit={handlePageLayoutCommit}
-          history={historyControls}
-          onPagesChange={setPages}
-          onSelectPage={(pageId) => updateSelectedPage(pageId)}
-        />
+        <SectionErrorBoundary sectionName="Canvas Workspace">
+          <Canvas
+            pages={pages}
+            setPages={setPages}
+            slugId={slugId}
+            isProjectLoading={isProjectLoading}
+            pageLayouts={pageLayouts}
+            selectedPageId={selectedPageId}
+            setSelectedPageId={(pageId) => updateSelectedPage(pageId)}
+            toolMode={toolMode}
+            setToolMode={updateToolMode}
+            onPageLayoutCommit={handlePageLayoutCommit}
+            history={historyControls}
+            onPagesChange={setPages}
+            onSelectPage={(pageId) => updateSelectedPage(pageId)}
+          />
+        </SectionErrorBoundary>
       </div>
       </div>
     </div>

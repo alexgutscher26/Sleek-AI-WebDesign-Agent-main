@@ -1,4 +1,4 @@
-﻿# Sleek AI Web Design Agent — Master Roadmap and TODO
+# Sleek AI Web Design Agent — Master Roadmap and TODO
 
 ## Version: 2.0 | Last Updated: 2026-07-14 | Project: ai-webdesign-agent
 ## Stack: Next.js 16 · React 19 · TypeScript · Tailwind CSS v4 · Clerk · Neon/Postgres · Vercel AI SDK · shadcn/ui
@@ -99,27 +99,27 @@
 - [x] Add secure defaults for all environment variables
 - [x] Remove hardcoded production fallback base URL
 - [x] Add boot-time config validation with fail-fast logging
-- [ ] Add graceful degradation when AI provider is unreachable (fallback provider or queued retry)
-- [ ] Add stream heartbeat mechanism to detect zombie connections
-- [ ] Add automatic stream reconnection on client network drop
-- [ ] Add server-side stream timeout escalation (warn -> abort -> cleanup)
-- [ ] Add partial result recovery to avoid full re-generation on minor failures
-- [ ] Validate that position fields never produce duplicate orderings after concurrent saves
-- [ ] Add DB constraint to prevent orphan pages without a parent project
-- [ ] Fix any Postgres connection pool exhaustion under concurrent generation load
-- [ ] Add structured error codes to all API error responses for client-side handling
-- [ ] Audit all Promise chains for unhandled rejections and add global handler
-- [ ] Add React error boundaries around all major UI sections (canvas, chat, sidebar)
+- [x] Add graceful degradation when AI provider is unreachable (fallbacrovider or queued retry)
+- [x] Add stream heartbeat mechanism to detect zombie connections
+- [x] Add automatic stream reconnection on client network drop
+- [x] Add server-side stream timeout escalation (warn -> abort -> cleanup)
+- [x] Add partial result recovery to avoid full re-generation on minor failures
+- [x] Validate that position fields never produce duplicate orderings after concurrent saves
+- [x] Add DB constraint to prevent orphan pages without a parent project
+- [x] Fix any Postgres connection pool exhaustion under concurrent generation load
+- [x] Add structured error codes to all API error responses for client-side handling
+- [x] Audit all Promise chains for unhandled rejections and add global handler
+- [x] Add React error boundaries around all major UI sections (canvas, chat, sidebar)
 
 ### Data Integrity
 
-- [ ] Add FK constraint enforcement review — ensure cascades are intentional
-- [ ] Add CHECK constraints for enum-like columns (e.g., status, platform)
-- [ ] Add DB-level NOT NULL where application logic assumes presence
-- [ ] Add migration rollback scripts for every future schema change
-- [ ] Verify generation_runs table correctly links to pages on commit
-- [ ] Add integrity check that HTML stored in DB is non-empty after any commit
-- [ ] Add periodic DB health check job that verifies referential integrity
+- [x] Add FK constraint enforcement review — ensure cascades are intentional
+- [x] Add CHECK constraints for enum-like columns (e.g., status, platform)
+- [x] Add DB-level NOT NULL where application logic assumes presence
+- [x] Add migration rollback scripts for every future schema change
+- [x] Verify generation_runs table correctly links to pages on commit
+- [x] Add integrity check that HTML stored in DB is non-empty after any commit
+- [x] Add periodic DB health check job that verifies referential integrity
 
 ### TypeScript and Code Quality
 

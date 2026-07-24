@@ -5,9 +5,25 @@ type RetryOptions = {
   maxAttemptsPerModel?: number
   initialDelayMs?: number
   signal?: AbortSignal
+  fallbackCompletion?: CompletionFactory
+  fallbackModel?: string
+}
+
+export class AiProviderUnreachableError extends Error {
+  readonly isProviderUnreachable = true
+  readonly originalError: unknown
+  readonly status: number
+
+  constructor(message: string, originalError?: unknown, status: number = 503) {
+    super(message)
+    this.name = "AiProviderUnreachableError"
+    this.originalError = originalError
+    this.status = status
+  }
 }
 
 const TRANSIENT_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+const UNREACHABLE_STATUS_CODES = new Set([502, 503, 504])
 
 const sleep = async (ms: number, signal?: AbortSignal) => {
   if (ms <= 0) {
@@ -42,6 +58,41 @@ export const isAbortLikeError = (error: unknown) => {
   }
 
   return error.name === "AbortError" || error.message === "Request aborted"
+}
+
+export const isProviderUnreachableError = (error: unknown): boolean => {
+  if (!error) return false
+  if (
+    error instanceof AiProviderUnreachableError ||
+    (typeof error === "object" &&
+      (error as { isProviderUnreachable?: boolean }).isProviderUnreachable === true)
+  ) {
+    return true
+  }
+
+  const status = "status" in (error as Record<string, unknown>)
+    ? Number((error as Record<string, unknown>).status)
+    : NaN
+  if (Number.isFinite(status) && UNREACHABLE_STATUS_CODES.has(status)) {
+    return true
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+
+  return [
+    "econnrefused",
+    "econnreset",
+    "etimedout",
+    "enotfound",
+    "socket hang up",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "fetch failed",
+    "network error",
+    "failed to fetch",
+    "connection refused"
+  ].some((needle) => message.includes(needle))
 }
 
 export const isTransientAiError = (error: unknown) => {
@@ -96,7 +147,9 @@ export async function createChatCompletionWithRetries<T = unknown>(
     fallbackModels = [],
     maxAttemptsPerModel = 3,
     initialDelayMs = 350,
-    signal
+    signal,
+    fallbackCompletion,
+    fallbackModel
   } = retryOptions
 
   const modelsToTry = [
@@ -133,5 +186,34 @@ export async function createChatCompletionWithRetries<T = unknown>(
     }
   }
 
+  if (fallbackCompletion && !isAbortLikeError(lastError)) {
+    try {
+      return await createChatCompletionWithRetries<T>(
+        fallbackCompletion,
+        {
+          ...options,
+          model: fallbackModel || options.model
+        },
+        {
+          maxAttemptsPerModel: 2,
+          initialDelayMs,
+          signal
+        }
+      )
+    } catch (fallbackError) {
+      lastError = fallbackError
+    }
+  }
+
+  if (isProviderUnreachableError(lastError)) {
+    const rawMessage = lastError instanceof Error ? lastError.message : String(lastError)
+    throw new AiProviderUnreachableError(
+      `AI Provider is currently unreachable: ${rawMessage}`,
+      lastError,
+      503
+    )
+  }
+
   throw lastError
 }
+

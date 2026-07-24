@@ -21,7 +21,7 @@ create table if not exists public.pages (
   "rootStyles" text not null,
   "htmlContent" text not null,
   metadata jsonb not null default '{}'::jsonb,
-  position integer not null default 0,
+  "position" integer not null default 0,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
 );
@@ -83,7 +83,7 @@ alter table public.projects
   add column if not exists "updatedAt" timestamptz;
 
 alter table public.pages
-  add column if not exists position integer;
+  add column if not exists "position" integer;
 
 alter table public.pages
   add column if not exists metadata jsonb;
@@ -163,21 +163,21 @@ with ranked_pages as (
     id,
     row_number() over (
       partition by "projectId"
-      order by coalesce(position, 2147483647), "createdAt", id
+      order by coalesce("position", 2147483647), "createdAt", id
     ) - 1 as next_position
   from public.pages
 )
 update public.pages
-set position = ranked_pages.next_position
+set "position" = ranked_pages.next_position
 from ranked_pages
 where public.pages.id = ranked_pages.id
-  and public.pages.position is distinct from ranked_pages.next_position;
+  and public.pages."position" is distinct from ranked_pages.next_position;
 
 alter table public.pages
-  alter column position set default 0;
+  alter column "position" set default 0;
 
 alter table public.pages
-  alter column position set not null;
+  alter column "position" set not null;
 
 update public.messages
 set "updatedAt" = coalesce("createdAt", now())
@@ -222,7 +222,7 @@ create index if not exists pages_projectid_createdat_idx
   on public.pages ("projectId", "createdAt" asc);
 
 create index if not exists pages_projectid_position_idx
-  on public.pages ("projectId", position asc, "createdAt" asc);
+  on public.pages ("projectId", "position" asc, "createdAt" asc);
 
 create index if not exists messages_projectid_createdat_idx
   on public.messages ("projectId", "createdAt" asc);
@@ -404,10 +404,10 @@ begin
       and "requestKind" = p_request_kind
       and "createdAt" >= now() - v_user_window;
 
-    if v_recent_user_requests >= case
+    if v_recent_user_requests >= (case
       when p_request_kind = 'chat' then v_chat_user_limit
       else v_user_limit
-    end then
+    end) then
       raise exception 'USER_RATE_LIMIT_EXCEEDED'
         using errcode = 'P0001';
     end if;
@@ -420,10 +420,10 @@ begin
         and "requestKind" = p_request_kind
         and "createdAt" >= now() - v_ip_window;
 
-      if v_recent_ip_requests >= case
+      if v_recent_ip_requests >= (case
         when p_request_kind = 'chat' then v_chat_ip_limit
         else v_ip_limit
-      end then
+      end) then
         raise exception 'IP_RATE_LIMIT_EXCEEDED'
           using errcode = 'P0001';
       end if;
@@ -599,16 +599,16 @@ begin
     select
       id,
       row_number() over (
-        order by position asc, "createdAt" asc, id asc
+        order by "position" asc, "createdAt" asc, id asc
       ) - 1 as next_position
     from public.pages
     where "projectId" = p_project_id
   )
   update public.pages
-  set position = ranked_pages.next_position
+  set "position" = ranked_pages.next_position
   from ranked_pages
   where public.pages.id = ranked_pages.id
-    and public.pages.position is distinct from ranked_pages.next_position;
+    and public.pages."position" is distinct from ranked_pages.next_position;
 end;
 $$;
 
@@ -630,7 +630,7 @@ begin
     from jsonb_array_elements_text(coalesce(p_page_ids, '[]'::jsonb)) with ordinality
   )
   update public.pages
-  set position = desired_order.next_position
+  set "position" = desired_order.next_position
   from desired_order
   where public.pages.id = desired_order.id
     and public.pages."projectId" = p_project_id;
@@ -677,7 +677,7 @@ returns table (
   "rootStyles" text,
   "htmlContent" text,
   metadata jsonb,
-  position integer,
+  "position" integer,
   "createdAt" timestamptz,
   "updatedAt" timestamptz
 )
@@ -706,12 +706,12 @@ begin
     )
   ),
   existing_pages as (
-    select coalesce(max(position), -1) as max_position
+    select coalesce(max("position"), -1) as max_position
     from public.pages
     where "projectId" = p_project_id
   ),
   inserted_pages as (
-    insert into public.pages ("projectId", name, "rootStyles", "htmlContent", metadata, position)
+    insert into public.pages ("projectId", name, "rootStyles", "htmlContent", metadata, "position")
     select
       p_project_id,
       page_payload.name,
@@ -727,7 +727,7 @@ begin
       public.pages."rootStyles",
       public.pages."htmlContent",
       public.pages.metadata,
-      public.pages.position,
+      public.pages."position",
       public.pages."createdAt",
       public.pages."updatedAt"
   )
@@ -737,7 +737,7 @@ begin
     inserted_pages."rootStyles",
     inserted_pages."htmlContent",
     inserted_pages.metadata,
-    inserted_pages.position,
+    inserted_pages."position",
     inserted_pages."createdAt",
     inserted_pages."updatedAt"
   from inserted_pages;
@@ -764,7 +764,7 @@ returns table (
   "rootStyles" text,
   "htmlContent" text,
   metadata jsonb,
-  position integer,
+  "position" integer,
   "createdAt" timestamptz,
   "updatedAt" timestamptz
 )
@@ -791,10 +791,156 @@ begin
     public.pages."rootStyles",
     public.pages."htmlContent",
     public.pages.metadata,
-    public.pages.position,
+    public.pages."position",
     public.pages."createdAt",
     public.pages."updatedAt";
 
   perform public.touch_project(p_user_id, p_project_id);
 end;
 $$;
+
+-- Defensive FK constraint check & NOT NULL enforcement to prevent orphan pages
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'pages_projectid_fkey'
+      and table_name = 'pages'
+  ) then
+    alter table public.pages
+      add constraint pages_projectid_fkey
+      foreign key ("projectId")
+      references public.projects(id)
+      on delete cascade;
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'pages_position_nonnegative_chk'
+      and table_name = 'pages'
+  ) then
+    alter table public.pages
+      add constraint pages_position_nonnegative_chk
+      check ("position" >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'messages_role_chk'
+      and table_name = 'messages'
+  ) then
+    alter table public.messages
+      add constraint messages_role_chk
+      check (role in ('user', 'assistant', 'system'));
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'generation_requests_requestkind_chk'
+      and table_name = 'generation_requests'
+  ) then
+    alter table public.generation_requests
+      add constraint generation_requests_requestkind_chk
+      check ("requestKind" in ('chat', 'generate', 'regenerate'));
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'generation_requests_status_chk'
+      and table_name = 'generation_requests'
+  ) then
+    alter table public.generation_requests
+      add constraint generation_requests_status_chk
+      check (status in ('in_progress', 'completed', 'failed', 'timed_out'));
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'generation_runs_task_chk'
+      and table_name = 'generation_runs'
+  ) then
+    alter table public.generation_runs
+      add constraint generation_runs_task_chk
+      check (task in ('intent', 'preflight', 'chat', 'analysis', 'generate', 'regenerate'));
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'generation_runs_status_chk'
+      and table_name = 'generation_runs'
+  ) then
+    alter table public.generation_runs
+      add constraint generation_runs_status_chk
+      check (status in ('completed', 'failed', 'timed_out', 'canceled'));
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'generation_runs_attempt_chk'
+      and table_name = 'generation_runs'
+  ) then
+    alter table public.generation_runs
+      add constraint generation_runs_attempt_chk
+      check (attempt >= 1);
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'generation_runs_metrics_chk'
+      and table_name = 'generation_runs'
+  ) then
+    alter table public.generation_runs
+      add constraint generation_runs_metrics_chk
+      check (
+        ("latencyMs" is null or "latencyMs" >= 0) and
+        ("promptTokens" is null or "promptTokens" >= 0) and
+        ("completionTokens" is null or "completionTokens" >= 0) and
+        ("totalTokens" is null or "totalTokens" >= 0)
+      );
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'pages_htmlcontent_nonempty_chk'
+      and table_name = 'pages'
+  ) then
+    alter table public.pages
+      add constraint pages_htmlcontent_nonempty_chk
+      check (length(trim("htmlContent")) > 0);
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'pages_name_nonempty_chk'
+      and table_name = 'pages'
+  ) then
+    alter table public.pages
+      add constraint pages_name_nonempty_chk
+      check (length(trim(name)) > 0);
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where constraint_name = 'projects_title_nonempty_chk'
+      and table_name = 'projects'
+  ) then
+    alter table public.projects
+      add constraint projects_title_nonempty_chk
+      check (length(trim(title)) > 0);
+  end if;
+end;
+$$;
+
+
