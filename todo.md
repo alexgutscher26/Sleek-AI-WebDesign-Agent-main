@@ -125,13 +125,13 @@
 
 - [ ] Enable strict: true mode fully in tsconfig.json and resolve all violations
 - [ ] Remove all remaining @ts-ignore and @ts-expect-error comments with proper fixes
-- [ ] Add eslint-plugin-unicorn for additional code quality rules
-- [ ] Add eslint-plugin-react-hooks exhaustive-deps rule enforcement
-- [ ] Enable noUncheckedIndexedAccess in TypeScript config
-- [ ] Enable exactOptionalPropertyTypes in TypeScript config
-- [ ] Add Zod schema validation for all environment variable access at startup
-- [ ] Audit lib/prompt.ts (36KB) — split into domain-specific modules per generation mode
-- [ ] Audit components/chat/index.tsx (29KB) — decompose into focused sub-components
+- [x] Add eslint-plugin-unicorn for additional code quality rules
+- [x] Add eslint-plugin-react-hooks exhaustive-deps rule enforcement
+- [x] Enable noUncheckedIndexedAccess in TypeScript config
+- [x] Enable exactOptionalPropertyTypes in TypeScript config
+- [x] Add Zod schema validation for all environment variable access at startup
+- [x] Audit lib/prompt.ts (36KB) — split into domain-specific modules per generation mode
+- [x] Audit components/chat/index.tsx (29KB) — decompose into focused sub-components
 
 ---
 

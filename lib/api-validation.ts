@@ -372,8 +372,8 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
       type: "file" as const,
       url: value.url,
       mediaType: value.mediaType,
-      filename: typeof value.filename === "string" ? value.filename : undefined,
-      size: typeof value.size === "number" ? value.size : undefined
+      ...(typeof value.filename === "string" ? { filename: value.filename } : {}),
+      ...(typeof value.size === "number" ? { size: value.size } : {})
     }
   }
 }
@@ -568,7 +568,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
 
   const lastMessage = messages[messages.length - 1]
   const hasUserMessage = messages.some((message) => message.role === "user")
-  const hasLastUserText = lastMessage.role === "user" && lastMessage.parts.some((part) => (
+  const hasLastUserText = lastMessage?.role === "user" && lastMessage.parts.some((part) => (
     part.type === "text" && part.text.trim().length > 0
   ))
 
@@ -581,7 +581,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     ])
   }
 
-  if (lastMessage.role !== "user") {
+  if (lastMessage?.role !== "user") {
     throw new RequestValidationError([
       {
         field: "messages[last].role",
@@ -713,7 +713,7 @@ export function parseAuthPostBody(input: unknown): AuthPostBody {
 
   return {
     action: "sync-token",
-    user: input.user as { id: string; email: string; profile?: unknown } | undefined
+    ...(input.user ? { user: input.user as { id: string; email: string; profile?: unknown } } : {})
   }
 }
 

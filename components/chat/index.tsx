@@ -11,6 +11,8 @@ import NewProjectChat from "./new-project-chat";
 import { Button } from "../ui/button";
 import { ArrowLeft, LayoutPanelLeft, MonitorSmartphone } from "lucide-react";
 import ChatPanel from "./chat-panel";
+import { ChatHeader } from "./chat-header";
+import { CompactPaneToggle } from "./compact-pane-toggle";
 import Canvas from "./canvas";
 import { PageType } from "@/types/project";
 import { useQuery } from "@tanstack/react-query";
@@ -389,20 +391,23 @@ const ChatInterface = ({
             const idx = prev.findIndex(p => p.id === tempId ||
               p.id === page.id
             )
-            if (idx !== -1) {
-              const updated = [...prev];
-              updated[idx] = {
-                ...page,
+              const newPage: PageType = {
+                id: page.id,
+                name: page.name,
+                rootStyles: page.rootStyles,
+                htmlContent: page.htmlContent,
                 isLoading: false,
-                isTemporary: !persisted
+                isTemporary: !persisted,
+                ...(page.metadata ? { metadata: page.metadata } : {}),
+                ...(page.error ? { error: page.error } : {})
               };
-              return updated;
-            }
-            return [...prev, {
-              ...page,
-              isLoading: false,
-              isTemporary: !persisted
-            }]
+
+              if (idx !== -1) {
+                const updated = [...prev];
+                updated[idx] = newPage;
+                return updated;
+              }
+              return [...prev, newPage]
           })
           break;
         }
@@ -414,10 +419,11 @@ const ChatInterface = ({
           }
           setPages(prev => {
             const idx = prev.findIndex(p => p.id === pageId);
-            if (idx !== -1) {
+            const targetPage = prev[idx];
+            if (idx !== -1 && targetPage) {
               const updated = [...prev];
               updated[idx] = {
-                ...updated[idx],
+                ...targetPage,
                 isLoading: true
               };
               return updated;
@@ -923,28 +929,11 @@ const ChatInterface = ({
 
   return (
     <div className="flex h-[100dvh] w-full flex-col overflow-hidden lg:flex-row">
-      <div className="border-b border-border bg-background/95 px-3 py-2 backdrop-blur md:px-4 lg:hidden">
-        <div className="flex items-center gap-2 rounded-full border border-border/70 bg-muted/30 p-1">
-          <Button
-            variant={activeCompactPane === "chat" ? "default" : "ghost"}
-            size="sm"
-            className="flex-1 rounded-full"
-            onClick={() => setActiveCompactPane("chat")}
-          >
-            <LayoutPanelLeft className="size-4" />
-            Chat
-          </Button>
-          <Button
-            variant={activeCompactPane === "canvas" ? "default" : "ghost"}
-            size="sm"
-            className="flex-1 rounded-full"
-            onClick={() => setActiveCompactPane("canvas")}
-          >
-            <MonitorSmartphone className="size-4" />
-            Canvas {pageCount > 0 ? `(${pageCount})` : ""}
-          </Button>
-        </div>
-      </div>
+      <CompactPaneToggle
+        activePane={activeCompactPane}
+        onPaneChange={setActiveCompactPane}
+        pageCount={pageCount}
+      />
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] md:grid-rows-[minmax(320px,42svh)_minmax(0,1fr)] lg:flex lg:min-w-0">
       <div
@@ -952,25 +941,10 @@ const ChatInterface = ({
         md:border-b lg:flex lg:h-full lg:w-full lg:max-w-md lg:border-b-0 lg:border-r
         ${activeCompactPane === "canvas" ? "hidden md:flex" : "flex"}`}
       >
-        {/* {ProjectTitle} */}
-        <div className="absolute left-0 top-0 z-10 w-full bg-background/95 pb-2
-        backdrop-blur
-        ">
-          <div role="button"
-            className="flex items-center gap-2 px-3 pt-2 cursor-pointer! md:px-4"
-            onClick={handleBack}
-          >
-            <Button variant="secondary"
-              size="icon"
-            >
-              <ArrowLeft />
-            </Button>
-          <h5 className="font-semibold tracking-tight
-            truncate pr-4 text-sm md:text-base">
-              {projectTitle || projectData?.title || "Untitled Project"}
-            </h5>
-          </div>
-        </div>
+        <ChatHeader
+          title={projectTitle || projectData?.title || "Untitled Project"}
+          onBack={handleBack}
+        />
 
         <SectionErrorBoundary sectionName="Chat Panel">
           <ChatPanel

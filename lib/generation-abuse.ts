@@ -35,10 +35,12 @@ const normalizeIp = (value: string) => {
 export const getClientIp = (request: NextRequest) => {
   const forwardedFor = request.headers.get("x-forwarded-for")
   if (forwardedFor) {
-    const firstIp = forwardedFor.split(",")[0]
-    const normalized = normalizeIp(firstIp)
-    if (normalized) {
-      return normalized
+    const firstIp = forwardedFor.split(",")[0]?.trim()
+    if (firstIp) {
+      const normalized = normalizeIp(firstIp)
+      if (normalized) {
+        return normalized
+      }
     }
   }
 

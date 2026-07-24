@@ -84,7 +84,7 @@ async function main() {
 
     for (let i = 0; i < statements.length; i++) {
       currentIdx = i
-      currentStmt = statements[i]
+      currentStmt = statements[i] ?? ""
       if (currentStmt) {
         await sql.unsafe(currentStmt)
       }

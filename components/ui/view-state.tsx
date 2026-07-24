@@ -6,15 +6,15 @@ import { AlertCircleIcon, InboxIcon, LoaderCircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 type ViewStateProps = {
-  className?: string;
+  className?: string | undefined;
   title: string;
   description: string;
-  icon?: ReactNode;
-  tone?: "default" | "error";
-  actionLabel?: string;
-  onAction?: () => void;
-  secondaryActionLabel?: string;
-  onSecondaryAction?: () => void;
+  icon?: ReactNode | undefined;
+  tone?: "default" | "error" | undefined;
+  actionLabel?: string | undefined;
+  onAction?: (() => void) | undefined;
+  secondaryActionLabel?: string | undefined;
+  onSecondaryAction?: (() => void) | undefined;
 };
 
 export const ViewState = ({

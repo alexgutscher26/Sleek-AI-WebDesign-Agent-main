@@ -44,7 +44,7 @@ type ChatInputProps = {
   isLoading: boolean;
   status: ChatStatus;
   controlsPosition?: "inside" | "below";
-  selectedPage?: PageType;
+  selectedPage?: PageType | undefined;
   setContentDepth: (depth: ContentDepth) => void;
   setCreativityLevel: (level: CreativityLevel) => void;
   setGenerationPlatform: (platform: GenerationPlatform) => void;

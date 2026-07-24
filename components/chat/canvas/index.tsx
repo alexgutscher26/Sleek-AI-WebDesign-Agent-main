@@ -246,7 +246,9 @@ const Canvas = ({
                           const fromIndex = nextPages.findIndex((entry) => entry.id === pageId)
                           if (fromIndex <= 0) return prev
                           const [moved] = nextPages.splice(fromIndex, 1)
-                          nextPages.splice(fromIndex - 1, 0, moved)
+                          if (moved) {
+                            nextPages.splice(fromIndex - 1, 0, moved)
+                          }
                           void persistPageOrder(nextPages)
                           return nextPages
                         })
@@ -258,7 +260,9 @@ const Canvas = ({
                           const fromIndex = nextPages.findIndex((entry) => entry.id === pageId)
                           if (fromIndex === -1 || fromIndex >= nextPages.length - 1) return prev
                           const [moved] = nextPages.splice(fromIndex, 1)
-                          nextPages.splice(fromIndex + 1, 0, moved)
+                          if (moved) {
+                            nextPages.splice(fromIndex + 1, 0, moved)
+                          }
                           void persistPageOrder(nextPages)
                           return nextPages
                         })

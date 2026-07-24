@@ -107,7 +107,7 @@ const PageFrame = ({
     ];
     return tokens.map(({ key, label }) => {
       const match = page.rootStyles.match(new RegExp(`${key}:\\s*([^;]+)`));
-      return { label, value: match ? match[1].trim() : null };
+      return { label, value: match?.[1]?.trim() ?? null };
     }).filter((token): token is ColorToken => Boolean(token.value));
   }, [page.rootStyles]);
 
@@ -167,12 +167,14 @@ const PageFrame = ({
             setSelectedPageId(page.id)
           }
         }}
-        resizeHandleComponent={{
-          topLeft: (isSelected || isHovered) ? <Handle /> : undefined,
-          topRight: (isSelected || isHovered) ? <Handle /> : undefined,
-          bottomLeft: (isSelected || isHovered) ? <Handle /> : undefined,
-          bottomRight: (isSelected || isHovered) ? <Handle /> : undefined,
-        }}
+        resizeHandleComponent={
+          (isSelected || isHovered) ? {
+            topLeft: <Handle />,
+            topRight: <Handle />,
+            bottomLeft: <Handle />,
+            bottomRight: <Handle />
+          } : {}
+        }
 
         className={cn(
           "relative z-30",

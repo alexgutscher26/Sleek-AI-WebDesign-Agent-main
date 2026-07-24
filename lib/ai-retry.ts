@@ -1,12 +1,12 @@
 type CompletionFactory = <T = unknown>(options: Record<string, unknown>) => Promise<T>
 
 type RetryOptions = {
-  fallbackModels?: string[]
-  maxAttemptsPerModel?: number
-  initialDelayMs?: number
-  signal?: AbortSignal
-  fallbackCompletion?: CompletionFactory
-  fallbackModel?: string
+  fallbackModels?: string[] | undefined
+  maxAttemptsPerModel?: number | undefined
+  initialDelayMs?: number | undefined
+  signal?: AbortSignal | undefined
+  fallbackCompletion?: CompletionFactory | undefined
+  fallbackModel?: string | undefined
 }
 
 export class AiProviderUnreachableError extends Error {

@@ -28,7 +28,7 @@ type PropsType = {
   styleIntensity: StyleIntensity;
   input: string;
   isLoading: boolean;
-  isProjectLoading?: boolean;
+  isProjectLoading?: boolean | undefined;
   setContentDepth: (depth: ContentDepth) => void;
   setCreativityLevel: (level: CreativityLevel) => void;
   setGenerationPlatform: (platform: GenerationPlatform) => void;
@@ -38,19 +38,19 @@ type PropsType = {
   setStyleIntensity: (intensity: StyleIntensity) => void;
   setInput: (input: string) => void;
   messages: UIMessage[];
-  error?: Error;
+  error?: Error | undefined;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
   onClearSelectedPage: () => void;
   status: ChatStatus;
-  selectedPage?: PageType
+  selectedPage?: PageType | undefined;
 }
 
 type GenerationCardData = {
   status: 'analyzing' | 'generating' | 'regenerating' | 'canceled' | 'complete' | 'error';
   pages: { id: string, name: string, done: boolean }[]
   currentPageId?: string
-  regeneratePage: { id: string, name: string, done: boolean }
+  regeneratePage?: { id: string, name: string, done: boolean } | undefined
 }
 
 const ChatPanel = ({
@@ -133,17 +133,17 @@ const ChatPanel = ({
                             </MessageResponse>
                           </div>
                         )
-                      case "data-generation":
+                      case "data-generation": {
                         const data = (part as { data: GenerationCardData }).data;
-                        return (
-                          <GenerationCard
-                            key={`${message.id}-gen-${i}`}
-                            status={data.status}
-                            pages={data.pages}
-                            currentPageId={data.currentPageId}
-                            regeneratePage={data.regeneratePage}
-                          />
-                        )
+                        const cardProps = {
+                          key: `${message.id}-gen-${i}`,
+                          status: data.status,
+                          pages: data.pages,
+                          ...(data.currentPageId ? { currentPageId: data.currentPageId } : {}),
+                          ...(data.regeneratePage ? { regeneratePage: data.regeneratePage } : {})
+                        };
+                        return <GenerationCard {...cardProps} />;
+                      }
 
                       default:
                         return null;
@@ -210,7 +210,7 @@ const GenerationCard = ({
 }: {
   status: 'analyzing' | 'generating' | 'regenerating' | 'canceled' | 'complete' | 'error';
   pages: { id: string, name: string, done: boolean }[]
-  regeneratePage: { id: string, name: string, done: boolean }
+  regeneratePage?: { id: string, name: string, done: boolean } | undefined
   currentPageId?: string
 }) => {
   const isComplete = status === "complete";

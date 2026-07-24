@@ -412,10 +412,10 @@ const emit = (
   }
 ) => {
   writer.write({
-    id: options?.id,
     type: `data-${type}`,
     data,
-    transient: options?.transient
+    ...(options?.id ? { id: options.id } : {}),
+    ...(options?.transient !== undefined ? { transient: options.transient } : {})
   })
 }
 
@@ -1269,9 +1269,15 @@ const persistGeneratedState = async (
       throw error
     }
 
-    const savedPages = ((Array.isArray(data) ? data : []) as PersistedPage[]).map((page, index) => ({
-      ...page,
-      metadata: page.metadata ?? generatedPages[index]?.metadata
+    const savedPages: PersistedPage[] = ((Array.isArray(data) ? data : []) as PersistedPage[]).map((page, index): PersistedPage => ({
+      id: page.id,
+      name: page.name,
+      rootStyles: page.rootStyles,
+      htmlContent: page.htmlContent,
+      metadata: page.metadata ?? generatedPages[index]?.metadata ?? {},
+      ...(typeof page.position === "number" ? { position: page.position } : {}),
+      ...(page.createdAt ? { createdAt: page.createdAt } : {}),
+      ...(page.updatedAt ? { updatedAt: page.updatedAt } : {})
     }))
 
     if (savedPages.length > 0) {
@@ -1314,7 +1320,7 @@ const persistGeneratedState = async (
         data: {
           status: "complete",
           pages: generatedPages.map((page, index) => ({
-            id: savedPages[index].id,
+            id: savedPages[index]?.id ?? page.tempId,
             name: page.name,
             done: true
           }))
@@ -1346,7 +1352,7 @@ const ensureUniquePagePositions = async (insforge: RouteInsforge, projectId: str
     const positionsSeen = new Set<number>()
 
     for (let i = 0; i < pages.length; i += 1) {
-      const pos = pages[i].position
+      const pos = pages[i]?.position
       if (typeof pos !== "number" || pos !== i || positionsSeen.has(pos)) {
         hasDuplicatesOrGaps = true
         break
@@ -1372,10 +1378,18 @@ const ensureUniquePagePositions = async (insforge: RouteInsforge, projectId: str
   await touchProject(insforge, userId, projectId)
   await ensureUniquePagePositions(insforge, projectId)
 
-  return (savedPages as PersistedPage[]).map((page, index) => ({
-    ...page,
-    metadata: page.metadata ?? generatedPages[index]?.metadata
+  const mappedPages: PersistedPage[] = (savedPages as PersistedPage[]).map((page, index): PersistedPage => ({
+    id: page.id,
+    name: page.name,
+    rootStyles: page.rootStyles,
+    htmlContent: page.htmlContent,
+    metadata: page.metadata ?? generatedPages[index]?.metadata ?? {},
+    ...(typeof page.position === "number" ? { position: page.position } : {}),
+    ...(page.createdAt ? { createdAt: page.createdAt } : {}),
+    ...(page.updatedAt ? { updatedAt: page.updatedAt } : {})
   }))
+
+  return mappedPages
 }
 
 const persistRegeneratedState = async (
@@ -1424,7 +1438,7 @@ const persistRegeneratedState = async (
       return {
         ...updatedPage,
         metadata: updatedPage.metadata ?? selectedPage.metadata
-      }
+      } as PersistedPage
     }
   } catch (error) {
     if (!isMissingRpcError(error)) {
@@ -1478,7 +1492,7 @@ const persistRegeneratedState = async (
   return {
     ...(updatedPage as PersistedPage),
     metadata: (updatedPage as PersistedPage).metadata ?? selectedPage.metadata
-  }
+  } as PersistedPage
 }
 
 const streamTextResponse = async (
@@ -1514,7 +1528,7 @@ const writeTextResponse = (writer: StreamWriter, text: string) => {
 
 const buildGenerationSummaryText = (pages: AnalysisPage[]) => {
   if (pages.length === 1) {
-    return `I've generated the ${pages[0].name} page and saved it to your project.`
+    return `I've generated the ${pages[0]?.name ?? "requested"} page and saved it to your project.`
   }
 
   const pageNames = pages.map((page) => page.name).join(", ")
@@ -1571,7 +1585,7 @@ async function runGenerationWorker({
       insforge,
       userId,
       projectId,
-      generationRequestId,
+      generationRequestId: generationRequestId ?? null,
       requestKind: "generate",
       task: "generate",
       modelProvider,
@@ -1764,7 +1778,7 @@ ${page.rootStyles}
 
   savedPages.forEach((savedPage, index) => {
     emit(writer, "page-created", {
-      tempId: generatedDrafts[index].tempId,
+      tempId: generatedDrafts[index]?.tempId ?? savedPage.id,
       persisted: true,
       page: {
         id: savedPage.id,
@@ -1828,7 +1842,7 @@ async function runRegenerateWorker({
       insforge,
       userId,
       projectId,
-      generationRequestId,
+      generationRequestId: generationRequestId ?? null,
       selectedPageId: selectedPage.id,
       requestKind: "regenerate",
       task: "regenerate",
@@ -1879,7 +1893,7 @@ async function runRegenerateWorker({
                 STYLE INTENSITY: ${styleIntensity}
                 EDITING: "${selectedPage.name}"
                 USER REQUEST: "${latestUserMessage}"
-                CHANGE ONLY: ${analysis.pages[0].visualDescription}
+                CHANGE ONLY: ${analysis.pages[0]?.visualDescription ?? ""}
                 Current HTML: ${selectedPage.htmlContent}
                 If Generation Mode is mobile-app, keep this as the actual mobile app screen only. Do not turn it into a website or a centered phone mockup.
                 Return the full page HTML with only the requested change. Start with <div.`.trim()
@@ -2478,7 +2492,7 @@ USER REQUEST: ${latestUserMessage}
           throwIfAborted(activeOperationSignal.signal)
           throwIfTimedOut(activeOperationSignal.didTimeOut())
 
-          const analysisText = analysisResult.choices[0].message.content || "{}"
+          const analysisText = analysisResult.choices[0]?.message?.content || "{}"
           const analysis = parseAnalysisResult(analysisText, {
             latestUserMessage: improvedUserPrompt,
             contentDepth,
@@ -2520,7 +2534,7 @@ USER REQUEST: ${latestUserMessage}
               {
                 kind: "regenerate",
                 page: regenerated.page,
-                preflightText: preflightText ?? undefined,
+                ...(preflightText ? { preflightText } : {}),
                 summaryText: regenerated.summaryText
               },
               null
@@ -2557,7 +2571,7 @@ USER REQUEST: ${latestUserMessage}
               {
                 kind: "generate",
                 pages: generated.savedPages,
-                preflightText: preflightText ?? undefined,
+                ...(preflightText ? { preflightText } : {}),
                 summaryText: generated.summaryText
               },
               null

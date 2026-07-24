@@ -2,11 +2,11 @@ import { getSql } from "@/lib/neon-db"
 
 type QueryResponse<T> = {
   data: T
-  error: { code?: string; message?: string } | null
+  error: { code?: string | undefined; message?: string | undefined } | null
 }
 
 type OrderOptions = {
-  ascending?: boolean
+  ascending?: boolean | undefined
 }
 
 type Filter =
@@ -176,7 +176,7 @@ class QueryBuilder<TData> implements PromiseLike<QueryResponse<TData>> {
   }
 
   order(column: string, options?: OrderOptions) {
-    this.orderClause = { column, options }
+    this.orderClause = { column, ...(options ? { options } : {}) }
     return this
   }
 

@@ -53,7 +53,7 @@ export const generateProjectTitle = async (message: string, insforgeClient?: Com
     }, {
       fallbackModels: ["google/gemini-2.5-pro"]
     })
-    const text = result.choices[0].message.content;
+    const text = result.choices[0]?.message?.content ?? "";
     return text.trim() || "Untitled Project"
   } catch (error) {
     if (isProviderUnreachableError(error)) {
@@ -91,7 +91,8 @@ export const convertModelMessages = async (messages: UIMessage[]) => {
       }
     }
 
-    const content = contentParts.length === 1 && contentParts?.[0].type === "text" ? contentParts[0].text : contentParts;
+    const firstPart = contentParts[0]
+    const content = contentParts.length === 1 && firstPart?.type === "text" ? firstPart.text : contentParts;
 
     return {
       role: message.role,

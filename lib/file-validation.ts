@@ -78,7 +78,7 @@ export function verifyInlineFilePayload(
 
   const [, declaredDataUrlType, base64Payload] = match
 
-  if (declaredDataUrlType !== mediaType) {
+  if (!base64Payload || declaredDataUrlType !== mediaType) {
     return {
       ok: false,
       message: "Uploaded file MIME metadata does not match the inline payload."

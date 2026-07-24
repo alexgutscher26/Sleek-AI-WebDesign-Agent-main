@@ -189,7 +189,10 @@ export default function LandingPage() {
   // Cycle helpers for mini-cards without expanded panels
   const cycle = <T extends string>(opts: readonly { value: T }[], cur: T, set: (v: T) => void) => {
     const idx = opts.findIndex(o => o.value === cur);
-    set(opts[(idx + 1) % opts.length].value);
+    const nextOpt = opts[(idx + 1) % opts.length];
+    if (nextOpt) {
+      set(nextOpt.value);
+    }
   };
 
   const handleGenerate = () => {

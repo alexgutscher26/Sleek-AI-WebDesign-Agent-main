@@ -63,6 +63,9 @@ const verifySecureCookieSettings = (request: NextRequest, response: NextResponse
 
   for (const header of cookies) {
     const [cookiePair, ...attributes] = header.split(";").map((part) => part.trim());
+    if (!cookiePair) {
+      continue;
+    }
     const cookieName = cookiePair.split("=")[0] ?? "";
     const normalizedAttributes = attributes.map((attribute) => attribute.toLowerCase());
     const isSessionLikeCookie = /^(__session|__clerk|__Secure-|__Host-)/i.test(cookieName);

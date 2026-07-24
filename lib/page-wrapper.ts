@@ -29,7 +29,7 @@ const sanitizeRootStyles = (value: string) => (
     .filter((match): match is RegExpMatchArray => Boolean(match))
     .map(([, token, rawValue]) => ({
       token,
-      value: rawValue.trim()
+      value: (rawValue ?? "").trim()
     }))
     .filter(({ value }) => (
       !/[<>{}`]/.test(value)
