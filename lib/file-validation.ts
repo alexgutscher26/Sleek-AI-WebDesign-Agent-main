@@ -1,12 +1,14 @@
 import { ALLOWED_FILE_MIME_TYPES, MAX_FILE_SIZE_BYTES } from "@/lib/request-limits"
 
-type FileSignatureCheck = {
-  ok: true
-  byteLength: number
-} | {
-  ok: false
-  message: string
-}
+type FileSignatureCheck =
+  | {
+      ok: true
+      byteLength: number
+    }
+  | {
+      ok: false
+      message: string
+    }
 
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/
 const ALLOWED_FILE_MIME_TYPE_SET = new Set(ALLOWED_FILE_MIME_TYPES)
@@ -57,14 +59,14 @@ export function verifyInlineFilePayload(
   if (!ALLOWED_FILE_MIME_TYPE_SET.has(mediaType as (typeof ALLOWED_FILE_MIME_TYPES)[number])) {
     return {
       ok: false,
-      message: "Unsupported uploaded file type."
+      message: "Unsupported uploaded file type.",
     }
   }
 
   if (!url.startsWith("data:")) {
     return {
       ok: false,
-      message: "Uploaded files must be sent as inline data URLs."
+      message: "Uploaded files must be sent as inline data URLs.",
     }
   }
 
@@ -72,7 +74,7 @@ export function verifyInlineFilePayload(
   if (!match) {
     return {
       ok: false,
-      message: "Uploaded files must use base64 data URLs."
+      message: "Uploaded files must use base64 data URLs.",
     }
   }
 
@@ -81,7 +83,7 @@ export function verifyInlineFilePayload(
   if (!base64Payload || declaredDataUrlType !== mediaType) {
     return {
       ok: false,
-      message: "Uploaded file MIME metadata does not match the inline payload."
+      message: "Uploaded file MIME metadata does not match the inline payload.",
     }
   }
 
@@ -91,21 +93,21 @@ export function verifyInlineFilePayload(
   } catch {
     return {
       ok: false,
-      message: "Uploaded file data could not be decoded."
+      message: "Uploaded file data could not be decoded.",
     }
   }
 
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_FILE_SIZE_BYTES) {
     return {
       ok: false,
-      message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`
+      message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`,
     }
   }
 
   if (typeof expectedSize === "number" && expectedSize !== bytes.byteLength) {
     return {
       ok: false,
-      message: "Uploaded file size metadata does not match the inline payload."
+      message: "Uploaded file size metadata does not match the inline payload.",
     }
   }
 
@@ -114,13 +116,13 @@ export function verifyInlineFilePayload(
   if (sniffedMimeType !== mediaType) {
     return {
       ok: false,
-      message: "Uploaded file content does not match the declared file type."
+      message: "Uploaded file content does not match the declared file type.",
     }
   }
 
   return {
     ok: true,
-    byteLength: bytes.byteLength
+    byteLength: bytes.byteLength,
   }
 }
 
@@ -132,21 +134,21 @@ export function verifyBinaryFilePayload(
   if (!ALLOWED_FILE_MIME_TYPE_SET.has(mediaType as (typeof ALLOWED_FILE_MIME_TYPES)[number])) {
     return {
       ok: false,
-      message: "Unsupported uploaded file type."
+      message: "Unsupported uploaded file type.",
     }
   }
 
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_FILE_SIZE_BYTES) {
     return {
       ok: false,
-      message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`
+      message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`,
     }
   }
 
   if (typeof expectedSize === "number" && expectedSize !== bytes.byteLength) {
     return {
       ok: false,
-      message: "Uploaded file size metadata does not match the payload."
+      message: "Uploaded file size metadata does not match the payload.",
     }
   }
 
@@ -155,12 +157,12 @@ export function verifyBinaryFilePayload(
   if (sniffedMimeType !== mediaType) {
     return {
       ok: false,
-      message: "Uploaded file content does not match the declared file type."
+      message: "Uploaded file content does not match the declared file type.",
     }
   }
 
   return {
     ok: true,
-    byteLength: bytes.byteLength
+    byteLength: bytes.byteLength,
   }
 }

@@ -10,8 +10,7 @@ type OrderOptions = {
 }
 
 type Filter =
-  | { type: "eq"; column: string; value: unknown }
-  | { type: "in"; column: string; values: unknown[] }
+  { type: "eq"; column: string; value: unknown } | { type: "in"; column: string; values: unknown[] }
 
 const VOID_RPCS = new Set([
   "finish_generation_request",
@@ -19,7 +18,7 @@ const VOID_RPCS = new Set([
   "touch_project",
   "sync_project_metadata",
   "rebalance_page_positions",
-  "update_page_positions"
+  "update_page_positions",
 ])
 
 const RPC_PARAM_ORDER: Record<string, string[]> = {
@@ -31,7 +30,7 @@ const RPC_PARAM_ORDER: Record<string, string[]> = {
     "p_idempotency_key",
     "p_request_hash",
     "p_request_kind",
-    "p_ip_hash"
+    "p_ip_hash",
   ],
   finish_generation_request: ["p_user_id", "p_request_id", "p_status", "p_response", "p_error"],
   commit_message_pair: ["p_user_id", "p_project_id", "p_user_parts", "p_assistant_parts"],
@@ -39,7 +38,13 @@ const RPC_PARAM_ORDER: Record<string, string[]> = {
   sync_project_metadata: ["p_user_id", "p_project_id", "p_metadata"],
   rebalance_page_positions: ["p_user_id", "p_project_id"],
   update_page_positions: ["p_user_id", "p_project_id", "p_page_ids"],
-  commit_generation_result: ["p_user_id", "p_project_id", "p_user_parts", "p_assistant_parts", "p_pages"],
+  commit_generation_result: [
+    "p_user_id",
+    "p_project_id",
+    "p_user_parts",
+    "p_assistant_parts",
+    "p_pages",
+  ],
   commit_regeneration_result: [
     "p_user_id",
     "p_project_id",
@@ -47,8 +52,8 @@ const RPC_PARAM_ORDER: Record<string, string[]> = {
     "p_html_content",
     "p_root_styles",
     "p_user_parts",
-    "p_assistant_parts"
-  ]
+    "p_assistant_parts",
+  ],
 }
 
 const RPC_PARAM_CASTS: Record<string, string[]> = {
@@ -61,11 +66,11 @@ const RPC_PARAM_CASTS: Record<string, string[]> = {
   rebalance_page_positions: ["text", "uuid"],
   update_page_positions: ["text", "uuid", "jsonb"],
   commit_generation_result: ["text", "uuid", "jsonb", "jsonb", "jsonb"],
-  commit_regeneration_result: ["text", "uuid", "uuid", "text", "text", "jsonb", "jsonb"]
+  commit_regeneration_result: ["text", "uuid", "uuid", "text", "text", "jsonb", "jsonb"],
 }
 
 function quoteIdentifier(identifier: string) {
-  return `"${identifier.replace(/"/g, "\"\"")}"`
+  return `"${identifier.replace(/"/g, '""')}"`
 }
 
 function normalizeColumnList(columns: string) {
@@ -82,7 +87,12 @@ function normalizeColumnList(columns: string) {
         return column
       }
 
-      if (column.includes("(") || column.includes(")") || /\s+as\s+/i.test(column) || column.includes("\"")) {
+      if (
+        column.includes("(") ||
+        column.includes(")") ||
+        /\s+as\s+/i.test(column) ||
+        column.includes('"')
+      ) {
         return column
       }
 
@@ -96,12 +106,12 @@ function mapDbError(error: unknown) {
     const typedError = error as { code?: string; message?: string }
     return {
       code: typedError.code,
-      message: typedError.message ?? "Database error"
+      message: typedError.message ?? "Database error",
     }
   }
 
   return {
-    message: "Database error"
+    message: "Database error",
   }
 }
 
@@ -266,18 +276,18 @@ class QueryBuilder<TData> implements PromiseLike<QueryResponse<TData>> {
         const row = normalizedRows[0] ?? null
         return {
           data: row as TData,
-          error: row ? null : { code: "PGRST116", message: "No rows returned" }
+          error: row ? null : { code: "PGRST116", message: "No rows returned" },
         }
       }
 
       return {
         data: normalizedRows as TData,
-        error: null
+        error: null,
       }
     } catch (error) {
       return {
         data: (this.expectSingle ? null : []) as TData,
-        error: mapDbError(error)
+        error: mapDbError(error),
       }
     }
   }
@@ -308,10 +318,14 @@ export function createCompatDatabaseClient() {
         const rows = await sql.unsafe(query, orderedParams as SqlParameterList)
         return {
           data: VOID_RPCS.has(name) ? null : (rows as TData),
-          error: null
+          error: null,
         }
       } catch (error) {
-        if (name === "begin_generation_request" && orderedKeys.at(-1) === "p_ip_hash" && isMissingFunctionError(error)) {
+        if (
+          name === "begin_generation_request" &&
+          orderedKeys.at(-1) === "p_ip_hash" &&
+          isMissingFunctionError(error)
+        ) {
           const legacyKeys = orderedKeys.slice(0, -1)
           const legacyParams = legacyKeys.map((key) => (key in params ? params[key] : null))
           const legacyPlaceholders = buildRpcPlaceholders(name, legacyParams.length)
@@ -324,21 +338,21 @@ export function createCompatDatabaseClient() {
 
             return {
               data: legacyRows as TData,
-              error: null
+              error: null,
             }
           } catch (legacyError) {
             return {
               data: null,
-              error: mapDbError(legacyError)
+              error: mapDbError(legacyError),
             }
           }
         }
 
         return {
           data: null,
-          error: mapDbError(error)
+          error: mapDbError(error),
         }
       }
-    }
+    },
   }
 }

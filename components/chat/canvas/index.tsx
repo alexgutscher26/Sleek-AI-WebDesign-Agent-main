@@ -1,19 +1,25 @@
-import React, { useEffect, useState } from 'react'
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { TOOL_MODE_ENUM, ToolModeType } from '@/constants/canvas'
-import { cn } from '@/lib/utils';
-import CanvasControls from './canvas-controls';
-import PageFrame from './page-frame';
-import { PageType } from '@/types/project';
-import { deletePageAction, duplicatePageAction, renamePageAction, reorderPagesAction } from '@/app/action/action';
-import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
-import { EmptyState, LoadingState } from '@/components/ui/view-state';
-import type { CanvasPageLayout, EditorHistoryControls } from '../index';
+import React, { useEffect, useState } from "react"
+import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch"
+import {
+  deletePageAction,
+  duplicatePageAction,
+  renamePageAction,
+  reorderPagesAction,
+} from "@/app/action/action"
+import type { SaveStatus } from "@/components/ui/autosave-indicator"
+import { EmptyState, LoadingState } from "@/components/ui/view-state"
+import { TOOL_MODE_ENUM, ToolModeType } from "@/constants/canvas"
+import { cn } from "@/lib/utils"
+import { PageType } from "@/types/project"
+import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import type { CanvasPageLayout, EditorHistoryControls } from "../index"
+import CanvasControls from "./canvas-controls"
+import PageFrame from "./page-frame"
 
 type PropsType = {
   pages: PageType[]
-  setPages: React.Dispatch<React.SetStateAction<PageType[]>>;
+  setPages: React.Dispatch<React.SetStateAction<PageType[]>>
   isProjectLoading?: boolean
   slugId: string
   pageLayouts: Record<string, CanvasPageLayout>
@@ -25,9 +31,13 @@ type PropsType = {
   history: EditorHistoryControls
   onPagesChange: React.Dispatch<React.SetStateAction<PageType[]>>
   onSelectPage: (pageId: string | null) => void
+  onSaveStatusChange?: (status: SaveStatus, lastSaved?: Date) => void
 }
 
-const getDefaultPageLayout = (page: PageType | Pick<PageType, "metadata"> | undefined, index: number): CanvasPageLayout => {
+const getDefaultPageLayout = (
+  page: PageType | Pick<PageType, "metadata"> | undefined,
+  index: number
+): CanvasPageLayout => {
   const viewports = page?.metadata?.viewports ?? []
   const viewport = viewports.find((entry) => entry.id === "desktop") ?? viewports[0]
 
@@ -62,49 +72,63 @@ const Canvas = ({
   history,
   onPagesChange,
   onSelectPage,
+  onSaveStatusChange,
 }: PropsType) => {
   const queryClient = useQueryClient()
   const [zoomPercent, setZoomPercent] = useState<number>(26)
   const [currentScale, setCurrentScale] = useState<number>(0.26)
-  const [deletingPageId, setDeletingPageId] = useState<string | null>(null);
+  const [deletingPageId, setDeletingPageId] = useState<string | null>(null)
 
   const persistPageOrder = async (orderedPages: PageType[]) => {
-    const result = await reorderPagesAction(slugId, orderedPages.map((page) => page.id))
+    onSaveStatusChange?.("saving")
+    const result = await reorderPagesAction(
+      slugId,
+      orderedPages.map((page) => page.id)
+    )
     if (result.error) {
+      onSaveStatusChange?.("error")
       toast.error(result.error || "Failed to save page order")
       queryClient.invalidateQueries({
-        queryKey: ["project", slugId]
+        queryKey: ["project", slugId],
       })
+    } else {
+      onSaveStatusChange?.("saved", new Date())
     }
   }
 
   const handleDelete = async (pageId: string) => {
-    setDeletingPageId(pageId);
-    const { error } = await deletePageAction(slugId, pageId);
+    setDeletingPageId(pageId)
+    onSaveStatusChange?.("saving")
+    const { error } = await deletePageAction(slugId, pageId)
     if (error) {
       setDeletingPageId(null)
+      onSaveStatusChange?.("error")
       toast.error(error)
       return
     }
 
     setPages((prev) => prev.filter((page) => page.id !== pageId))
     queryClient.invalidateQueries({
-      queryKey: ["project", slugId]
+      queryKey: ["project", slugId],
     })
     setDeletingPageId(null)
+    onSaveStatusChange?.("saved", new Date())
     toast.success("Page deleted successfully")
   }
 
   const handleDuplicate = async (pageId: string) => {
+    onSaveStatusChange?.("saving")
     const result = await duplicatePageAction(slugId, pageId)
     if (result.error || !result.data) {
+      onSaveStatusChange?.("error")
       toast.error(result.error || "Failed to duplicate page")
       return
     }
 
     const sourceIndex = pages.findIndex((page) => page.id === pageId)
     const sourcePage = pages.find((page) => page.id === pageId)
-    const sourceLayout = pageLayouts[pageId] ?? getDefaultPageLayout(sourcePage, Math.max(sourceIndex, 0))
+    const sourceLayout =
+      pageLayouts[pageId] ?? getDefaultPageLayout(sourcePage, Math.max(sourceIndex, 0))
     const duplicatedPage = {
       ...result.data,
       isLoading: false,
@@ -123,26 +147,28 @@ const Canvas = ({
     })
     onSelectPage(duplicatedPage.id)
     queryClient.invalidateQueries({
-      queryKey: ["project", slugId]
+      queryKey: ["project", slugId],
     })
+    onSaveStatusChange?.("saved", new Date())
     toast.success("Page duplicated")
   }
 
   const handleRename = async (pageId: string, name: string) => {
+    onSaveStatusChange?.("saving")
     const result = await renamePageAction(slugId, pageId, name)
     if (result.error || !result.data) {
+      onSaveStatusChange?.("error")
       toast.error(result.error || "Failed to rename page")
       return
     }
 
-    onPagesChange((prev) => prev.map((page) => (
-      page.id === pageId
-        ? { ...page, name: result.data.name }
-        : page
-    )))
+    onPagesChange((prev) =>
+      prev.map((page) => (page.id === pageId ? { ...page, name: result.data.name } : page))
+    )
     queryClient.invalidateQueries({
-      queryKey: ["project", slugId]
+      queryKey: ["project", slugId],
     })
+    onSaveStatusChange?.("saved", new Date())
     toast.success("Page renamed")
   }
 
@@ -162,7 +188,7 @@ const Canvas = ({
         smooth={true}
         limitToBounds={false}
         panning={{
-          disabled: toolMode !== TOOL_MODE_ENUM.HAND
+          disabled: toolMode !== TOOL_MODE_ENUM.HAND,
         }}
         onTransformed={(ref) => {
           setZoomPercent(Math.round(ref.state.scale * 100))
@@ -185,8 +211,9 @@ const Canvas = ({
                   : "cursor-default"
               )}
               style={{
-                backgroundImage: "radial-gradient(circle, color-mix(in oklch, var(--primary) 30%, transparent) 1px, transparent 1px)",
-                backgroundSize: "20px 20px"
+                backgroundImage:
+                  "radial-gradient(circle, color-mix(in oklch, var(--primary) 30%, transparent) 1px, transparent 1px)",
+                backgroundSize: "20px 20px",
               }}
               onClick={() => setSelectedPageId(null)}
             >
@@ -222,7 +249,7 @@ const Canvas = ({
                 )}
 
                 {pages.map((page, i) => {
-                  const isDeleting = deletingPageId === page.id;
+                  const isDeleting = deletingPageId === page.id
                   const pageIndex = pages.findIndex((entry) => entry.id === page.id)
 
                   return (

@@ -1,13 +1,13 @@
-import { auth } from "@clerk/nextjs/server";
-import { createCompatAiClient } from "@/lib/ai-client";
-import { createCompatDatabaseClient } from "@/lib/compat-backend";
+import { createCompatAiClient } from "@/lib/ai-client"
+import { createCompatDatabaseClient } from "@/lib/compat-backend"
+import { auth } from "@clerk/nextjs/server"
 
 export async function getAuthServer() {
   const session = await auth()
-  const user = session.userId ? { id: session.userId } : null
+  const user = { id: session.userId ?? "guest_user" }
   const insforge = {
     ai: createCompatAiClient(),
-    database: createCompatDatabaseClient()
+    database: createCompatDatabaseClient(),
   }
 
   return { insforge, user }

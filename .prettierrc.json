@@ -1,0 +1,37 @@
+{
+  "semi": false,
+  "singleQuote": false,
+  "quoteProps": "as-needed",
+  "trailingComma": "es5",
+  "tabWidth": 2,
+  "useTabs": false,
+  "printWidth": 100,
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "plugins": [
+    "@trivago/prettier-plugin-sort-imports",
+    "prettier-plugin-tailwindcss"
+  ],
+  "importOrder": [
+    "^(react|react-dom)(.*)$",
+    "^(next)(.*)$",
+    "^@(.*)$",
+    "^[a-zA-Z]",
+    "^[./]"
+  ],
+  "importOrderSeparation": false,
+  "importOrderSortSpecifiers": true,
+  "tailwindFunctions": ["cn", "clsx", "cva", "tw"],
+  "overrides": [
+    {
+      "files": ["*.json", "*.jsonc"],
+      "options": { "printWidth": 80 }
+    },
+    {
+      "files": ["*.md", "*.mdx"],
+      "options": { "printWidth": 80, "proseWrap": "always" }
+    }
+  ]
+}

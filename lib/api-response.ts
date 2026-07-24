@@ -16,8 +16,8 @@ export function createErrorResponse(
       error: {
         code,
         message,
-        ...(details ? { details } : {})
-      }
+        ...(details ? { details } : {}),
+      },
     },
     { status }
   )
@@ -27,7 +27,7 @@ export function createSuccessResponse<T>(data: T, status = 200) {
   return NextResponse.json(
     {
       success: true,
-      data
+      data,
     },
     { status }
   )

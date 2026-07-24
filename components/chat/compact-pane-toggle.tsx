@@ -1,13 +1,13 @@
-"use client";
+"use client"
 
-import { Button } from "../ui/button";
-import { LayoutPanelLeft, MonitorSmartphone } from "lucide-react";
+import { LayoutPanelLeft, MonitorSmartphone } from "lucide-react"
+import { Button } from "../ui/button"
 
 type CompactPaneToggleProps = {
-  activePane: "chat" | "canvas";
-  onPaneChange: (pane: "chat" | "canvas") => void;
-  pageCount: number;
-};
+  activePane: "chat" | "canvas"
+  onPaneChange: (pane: "chat" | "canvas") => void
+  pageCount: number
+}
 
 export const CompactPaneToggle = ({
   activePane,
@@ -15,8 +15,8 @@ export const CompactPaneToggle = ({
   pageCount,
 }: CompactPaneToggleProps) => {
   return (
-    <div className="border-b border-border bg-background/95 px-3 py-2 backdrop-blur md:px-4 lg:hidden">
-      <div className="flex items-center gap-2 rounded-full border border-border/70 bg-muted/30 p-1">
+    <div className="border-border bg-background/95 border-b px-3 py-2 backdrop-blur md:px-4 lg:hidden">
+      <div className="border-border/70 bg-muted/30 flex items-center gap-2 rounded-full border p-1">
         <Button
           variant={activePane === "chat" ? "default" : "ghost"}
           size="sm"
@@ -37,5 +37,5 @@ export const CompactPaneToggle = ({
         </Button>
       </div>
     </div>
-  );
-};
+  )
+}

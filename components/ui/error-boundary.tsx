@@ -39,7 +39,7 @@ export class SectionErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="flex h-full w-full items-center justify-center p-6 bg-background/50">
+        <div className="bg-background/50 flex h-full w-full items-center justify-center p-6">
           <ErrorState
             className="max-w-md"
             title={`${this.props.sectionName || "Section"} encountered an error`}

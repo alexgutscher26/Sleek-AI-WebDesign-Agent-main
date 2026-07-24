@@ -1,9 +1,7 @@
 import { headers } from "next/headers"
 import { NextRequest } from "next/server"
 
-type TrustedRequestResult =
-  | { ok: true }
-  | { ok: false; code: string; message: string }
+type TrustedRequestResult = { ok: true } | { ok: false; code: string; message: string }
 
 type HeaderSource = Pick<Headers, "get">
 
@@ -40,7 +38,7 @@ const assertTrustedHeaders = (
     return {
       ok: false,
       code: "UNTRUSTED_REQUEST",
-      message: "Unable to verify request origin."
+      message: "Unable to verify request origin.",
     }
   }
 
@@ -49,7 +47,7 @@ const assertTrustedHeaders = (
     return {
       ok: false,
       code: "CROSS_SITE_BLOCKED",
-      message: "Cross-site requests are not allowed."
+      message: "Cross-site requests are not allowed.",
     }
   }
 
@@ -58,7 +56,7 @@ const assertTrustedHeaders = (
     return {
       ok: false,
       code: "UNTRUSTED_ORIGIN",
-      message: "Request origin is not allowed."
+      message: "Request origin is not allowed.",
     }
   }
 
@@ -67,7 +65,7 @@ const assertTrustedHeaders = (
     return {
       ok: false,
       code: "UNTRUSTED_REFERER",
-      message: "Request referer is not allowed."
+      message: "Request referer is not allowed.",
     }
   }
 
@@ -75,7 +73,7 @@ const assertTrustedHeaders = (
     return {
       ok: false,
       code: "MISSING_REQUEST_ORIGIN",
-      message: "Missing trusted browser origin headers."
+      message: "Missing trusted browser origin headers.",
     }
   }
 
@@ -89,11 +87,9 @@ export const assertTrustedAppRequest = (
   }
 ): TrustedRequestResult => assertTrustedHeaders(request.headers, options)
 
-export const assertTrustedServerActionRequest = async (
-  options?: {
-    requireNavigationHeaders?: boolean
-  }
-): Promise<TrustedRequestResult> => {
+export const assertTrustedServerActionRequest = async (options?: {
+  requireNavigationHeaders?: boolean
+}): Promise<TrustedRequestResult> => {
   const headerStore = await headers()
   return assertTrustedHeaders(headerStore, options)
 }

@@ -1,0 +1,67 @@
+version: 2
+
+updates:
+  # ── npm / Node.js dependencies ──────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "UTC"
+    # Open a maximum of 10 PRs at once to avoid PR spam
+    open-pull-requests-limit: 10
+    # Label all Dependabot PRs
+    labels:
+      - "dependencies"
+      - "automated"
+    # Separate major bumps so they are never auto-merged
+    groups:
+      # Patch updates for all packages — safe to auto-merge
+      patch-updates:
+        update-types:
+          - "patch"
+      # Minor updates — review recommended but generally safe
+      minor-updates:
+        update-types:
+          - "minor"
+      # ── Critical packages: always individual PRs, never grouped ────────────
+      # (Dependabot will still open them; they just won't be grouped)
+    ignore:
+      # Ignore major version bumps for these ecosystem-sensitive packages;
+      # they will be handled manually after reviewing breaking change notes.
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@clerk/nextjs"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ai"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@ai-sdk/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "zod"
+        update-types: ["version-update:semver-major"]
+    # Commit message prefix makes changelogs cleaner
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+
+  # ── GitHub Actions ──────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "chore(actions)"

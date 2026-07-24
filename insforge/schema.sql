@@ -308,6 +308,7 @@ returns table (
 )
 language plpgsql
 as $$
+#variable_conflict use_column
 declare
   v_project public.projects%rowtype;
   v_created boolean := false;
@@ -363,6 +364,7 @@ returns table (
 )
 language plpgsql
 as $$
+#variable_conflict use_column
 declare
   v_request public.generation_requests%rowtype;
   v_inserted boolean := false;
@@ -683,6 +685,7 @@ returns table (
 )
 language plpgsql
 as $$
+#variable_conflict use_column
 begin
   perform public.assert_project_owner(p_user_id, p_project_id);
 
@@ -697,6 +700,7 @@ begin
       payload.name,
       payload."rootStyles",
       payload."htmlContent",
+      payload.metadata,
       row_number() over () - 1 as offset
     from jsonb_to_recordset(coalesce(p_pages, '[]'::jsonb)) as payload(
       name text,
@@ -770,6 +774,7 @@ returns table (
 )
 language plpgsql
 as $$
+#variable_conflict use_column
 begin
   perform public.assert_project_owner(p_user_id, p_project_id);
 

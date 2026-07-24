@@ -1,41 +1,49 @@
+import {
+  CONTENT_DEPTH_SET,
+  type ContentDepth,
+  DEFAULT_CONTENT_DEPTH,
+} from "@/constants/content-depth"
+import {
+  CREATIVITY_LEVEL_SET,
+  type CreativityLevel,
+  DEFAULT_CREATIVITY_LEVEL,
+} from "@/constants/creativity-level"
+import {
+  DEFAULT_GENERATION_MODE,
+  GENERATION_MODE_SET,
+  type GenerationMode,
+} from "@/constants/generation-mode"
+import {
+  DEFAULT_GENERATION_PLATFORM,
+  GENERATION_PLATFORM_SET,
+  type GenerationPlatform,
+} from "@/constants/generation-platform"
+import {
+  DEFAULT_LAYOUT_COMPLEXITY,
+  LAYOUT_COMPLEXITY_SET,
+  type LayoutComplexity,
+} from "@/constants/layout-complexity"
+import {
+  DEFAULT_MODEL_PROVIDER,
+  MODEL_PROVIDER_SET,
+  type ModelProvider,
+} from "@/constants/model-provider"
+import {
+  DEFAULT_STYLE_INTENSITY,
+  STYLE_INTENSITY_SET,
+  type StyleIntensity,
+} from "@/constants/style-intensity"
 import { createErrorResponse } from "@/lib/api-response"
+import { verifyInlineFilePayload } from "@/lib/file-validation"
+import { detectPromptInjection } from "@/lib/prompt-injection"
 import {
   ALLOWED_FILE_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
   MAX_MESSAGES,
   MAX_TEXT_PART_LENGTH,
   MAX_TOTAL_TEXT_LENGTH,
-  MIME_EXTENSIONS
+  MIME_EXTENSIONS,
 } from "@/lib/request-limits"
-import { verifyInlineFilePayload } from "@/lib/file-validation"
-import {
-  CONTENT_DEPTH_SET,
-  DEFAULT_CONTENT_DEPTH,
-  type ContentDepth
-} from "@/constants/content-depth"
-import {
-  CREATIVITY_LEVEL_SET,
-  DEFAULT_CREATIVITY_LEVEL,
-  type CreativityLevel
-} from "@/constants/creativity-level"
-import {
-  DEFAULT_GENERATION_PLATFORM,
-  GENERATION_PLATFORM_SET,
-  type GenerationPlatform
-} from "@/constants/generation-platform"
-import { DEFAULT_GENERATION_MODE, GENERATION_MODE_SET, type GenerationMode } from "@/constants/generation-mode"
-import {
-  DEFAULT_LAYOUT_COMPLEXITY,
-  LAYOUT_COMPLEXITY_SET,
-  type LayoutComplexity
-} from "@/constants/layout-complexity"
-import {
-  DEFAULT_MODEL_PROVIDER,
-  MODEL_PROVIDER_SET,
-  type ModelProvider
-} from "@/constants/model-provider"
-import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITY_SET, type StyleIntensity } from "@/constants/style-intensity"
-import { detectPromptInjection } from "@/lib/prompt-injection"
 
 const SLUG_ID_PATTERN = /^[A-Za-z0-9]{6,64}$/
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
@@ -115,7 +123,7 @@ const validateSlugId = (value: unknown, field = "slugId") => {
   if (typeof value !== "string" || !SLUG_ID_PATTERN.test(value)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be an alphanumeric slug ID." }
+      issue: { field, message: "Must be an alphanumeric slug ID." },
     }
   }
 
@@ -130,7 +138,7 @@ const validateOptionalEntityId = (value: unknown, field: string) => {
   if (typeof value !== "string" || !ENTITY_ID_PATTERN.test(value)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be a valid identifier string." }
+      issue: { field, message: "Must be a valid identifier string." },
     }
   }
 
@@ -145,7 +153,7 @@ const validateOptionalIdempotencyKey = (value: unknown, field = "idempotencyKey"
   if (typeof value !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(value)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be a valid idempotency key." }
+      issue: { field, message: "Must be a valid idempotency key." },
     }
   }
 
@@ -160,7 +168,7 @@ const validateGenerationMode = (value: unknown, field = "generationMode") => {
   if (typeof value !== "string" || !GENERATION_MODE_SET.has(value as GenerationMode)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be one of: landing, dashboard, auth, docs, ecommerce." }
+      issue: { field, message: "Must be one of: landing, dashboard, auth, docs, ecommerce." },
     }
   }
 
@@ -175,7 +183,7 @@ const validateGenerationPlatform = (value: unknown, field = "generationPlatform"
   if (typeof value !== "string" || !GENERATION_PLATFORM_SET.has(value as GenerationPlatform)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be one of: ios, android, both." }
+      issue: { field, message: "Must be one of: ios, android, both." },
     }
   }
 
@@ -190,7 +198,7 @@ const validateContentDepth = (value: unknown, field = "contentDepth") => {
   if (typeof value !== "string" || !CONTENT_DEPTH_SET.has(value as ContentDepth)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be one of: wireframe, realistic-copy, complete." }
+      issue: { field, message: "Must be one of: wireframe, realistic-copy, complete." },
     }
   }
 
@@ -205,7 +213,7 @@ const validateCreativityLevel = (value: unknown, field = "creativityLevel") => {
   if (typeof value !== "string" || !CREATIVITY_LEVEL_SET.has(value as CreativityLevel)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be one of: strict, balanced, exploratory." }
+      issue: { field, message: "Must be one of: strict, balanced, exploratory." },
     }
   }
 
@@ -220,7 +228,7 @@ const validateLayoutComplexity = (value: unknown, field = "layoutComplexity") =>
   if (typeof value !== "string" || !LAYOUT_COMPLEXITY_SET.has(value as LayoutComplexity)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be one of: simple, balanced, complex." }
+      issue: { field, message: "Must be one of: simple, balanced, complex." },
     }
   }
 
@@ -235,7 +243,7 @@ const validateModelProvider = (value: unknown, field = "modelProvider") => {
   if (typeof value !== "string" || !MODEL_PROVIDER_SET.has(value as ModelProvider)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be one of: auto, gemini, claude." }
+      issue: { field, message: "Must be one of: auto, gemini, claude." },
     }
   }
 
@@ -250,7 +258,7 @@ const validateStyleIntensity = (value: unknown, field = "styleIntensity") => {
   if (typeof value !== "string" || !STYLE_INTENSITY_SET.has(value as StyleIntensity)) {
     return {
       ok: false as const,
-      issue: { field, message: "Must be one of: minimal, balanced, bold." }
+      issue: { field, message: "Must be one of: minimal, balanced, bold." },
     }
   }
 
@@ -261,7 +269,7 @@ const validateTextPart = (value: Record<string, unknown>, field: string) => {
   if (typeof value.text !== "string" || !value.text.trim()) {
     return {
       ok: false as const,
-      issue: { field, message: "Text parts must include non-empty text." }
+      issue: { field, message: "Text parts must include non-empty text." },
     }
   }
 
@@ -270,8 +278,8 @@ const validateTextPart = (value: Record<string, unknown>, field: string) => {
       ok: false as const,
       issue: {
         field,
-        message: `Text parts must be ${MAX_TEXT_PART_LENGTH} characters or fewer.`
-      }
+        message: `Text parts must be ${MAX_TEXT_PART_LENGTH} characters or fewer.`,
+      },
     }
   }
 
@@ -279,8 +287,8 @@ const validateTextPart = (value: Record<string, unknown>, field: string) => {
     ok: true as const,
     value: {
       type: "text" as const,
-      text: value.text
-    }
+      text: value.text,
+    },
   }
 }
 
@@ -288,24 +296,26 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
   if (typeof value.url !== "string" || !value.url.trim()) {
     return {
       ok: false as const,
-      issue: { field, message: "File parts must include a URL." }
+      issue: { field, message: "File parts must include a URL." },
     }
   }
 
   if (typeof value.mediaType !== "string" || !value.mediaType.trim()) {
     return {
       ok: false as const,
-      issue: { field, message: "File parts must include a media type." }
+      issue: { field, message: "File parts must include a media type." },
     }
   }
 
-  if (!ALLOWED_FILE_MIME_TYPES_SET.has(value.mediaType as (typeof ALLOWED_FILE_MIME_TYPES)[number])) {
+  if (
+    !ALLOWED_FILE_MIME_TYPES_SET.has(value.mediaType as (typeof ALLOWED_FILE_MIME_TYPES)[number])
+  ) {
     return {
       ok: false as const,
       issue: {
         field,
-        message: "Only JPEG, PNG, WEBP, and GIF image uploads are supported."
-      }
+        message: "Only JPEG, PNG, WEBP, and GIF image uploads are supported.",
+      },
     }
   }
 
@@ -319,8 +329,8 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
       ok: false as const,
       issue: {
         field,
-        message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`
-      }
+        message: `Files must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes.`,
+      },
     }
   }
 
@@ -329,8 +339,8 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
       ok: false as const,
       issue: {
         field,
-        message: "File parts must include a filename."
-      }
+        message: "File parts must include a filename.",
+      },
     }
   }
 
@@ -345,8 +355,8 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
       ok: false as const,
       issue: {
         field,
-        message: "File type does not match the provided filename extension."
-      }
+        message: "File type does not match the provided filename extension.",
+      },
     }
   }
 
@@ -361,8 +371,8 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
       ok: false as const,
       issue: {
         field,
-        message: verification.message
-      }
+        message: verification.message,
+      },
     }
   }
 
@@ -373,8 +383,8 @@ const validateFilePart = (value: Record<string, unknown>, field: string) => {
       url: value.url,
       mediaType: value.mediaType,
       ...(typeof value.filename === "string" ? { filename: value.filename } : {}),
-      ...(typeof value.size === "number" ? { size: value.size } : {})
-    }
+      ...(typeof value.size === "number" ? { size: value.size } : {}),
+    },
   }
 }
 
@@ -383,14 +393,14 @@ const validateMessagePart = (value: unknown, index: number) => {
   if (!isRecord(value)) {
     return {
       ok: false as const,
-      issue: { field, message: "Each message part must be an object." }
+      issue: { field, message: "Each message part must be an object." },
     }
   }
 
   if (!ALLOWED_PART_TYPES.has(String(value.type))) {
     return {
       ok: false as const,
-      issue: { field, message: "Unsupported message part type." }
+      issue: { field, message: "Unsupported message part type." },
     }
   }
 
@@ -406,21 +416,24 @@ const validateMessage = (value: unknown, index: number) => {
   if (!isRecord(value)) {
     return {
       ok: false as const,
-      issue: { field, message: "Each message must be an object." }
+      issue: { field, message: "Each message must be an object." },
     }
   }
 
   if (!ALLOWED_MESSAGE_ROLES.has(String(value.role))) {
     return {
       ok: false as const,
-      issue: { field: `${field}.role`, message: "Only user and assistant message roles are supported." }
+      issue: {
+        field: `${field}.role`,
+        message: "Only user and assistant message roles are supported.",
+      },
     }
   }
 
   if (!Array.isArray(value.parts) || value.parts.length === 0) {
     return {
       ok: false as const,
-      issue: { field: `${field}.parts`, message: "Each message must include at least one part." }
+      issue: { field: `${field}.parts`, message: "Each message must include at least one part." },
     }
   }
 
@@ -432,9 +445,7 @@ const validateMessage = (value: unknown, index: number) => {
     const rawPart = value.parts[partIndex]
     const parsedPart = validateMessagePart(rawPart, partIndex)
     if (!parsedPart.ok) {
-      const rawType = isRecord(rawPart) && typeof rawPart.type === "string"
-        ? rawPart.type
-        : null
+      const rawType = isRecord(rawPart) && typeof rawPart.type === "string" ? rawPart.type : null
 
       // Assistant messages can include UI-only metadata parts (for example data-generation).
       // We ignore those on the server and keep only text/file parts for model context.
@@ -458,14 +469,17 @@ const validateMessage = (value: unknown, index: number) => {
         ok: true as const,
         value: {
           role,
-          parts
-        }
+          parts,
+        },
       }
     }
 
     return {
       ok: false as const,
-      issue: { field: `${field}.parts`, message: "Each message must include at least one supported part." }
+      issue: {
+        field: `${field}.parts`,
+        message: "Each message must include at least one supported part.",
+      },
     }
   }
 
@@ -473,8 +487,8 @@ const validateMessage = (value: unknown, index: number) => {
     ok: true as const,
     value: {
       role,
-      parts
-    }
+      parts,
+    },
   }
 }
 
@@ -483,7 +497,7 @@ export async function parseJsonBody(request: Request) {
     return await request.json()
   } catch {
     throw new RequestValidationError([
-      { field: "body", message: "Request body must be valid JSON." }
+      { field: "body", message: "Request body must be valid JSON." },
     ])
   }
 }
@@ -491,7 +505,7 @@ export async function parseJsonBody(request: Request) {
 export function parseProjectPostBody(input: unknown): ProjectPostBody {
   if (!isRecord(input)) {
     throw new RequestValidationError([
-      { field: "body", message: "Request body must be a JSON object." }
+      { field: "body", message: "Request body must be a JSON object." },
     ])
   }
 
@@ -523,7 +537,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
   } else if (input.messages.length > MAX_MESSAGES) {
     issues.push({
       field: "messages",
-      message: `Messages must contain ${MAX_MESSAGES} entries or fewer.`
+      message: `Messages must contain ${MAX_MESSAGES} entries or fewer.`,
     })
   }
 
@@ -532,11 +546,12 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     for (let index = 0; index < input.messages.length; index += 1) {
       const parsedMessage = validateMessage(input.messages[index], index)
       if (!parsedMessage.ok) {
-        const parsedIssues = "issues" in parsedMessage
-          ? (parsedMessage.issues ?? [])
-          : parsedMessage.issue
-            ? [parsedMessage.issue]
-            : []
+        const parsedIssues =
+          "issues" in parsedMessage
+            ? (parsedMessage.issues ?? [])
+            : parsedMessage.issue
+              ? [parsedMessage.issue]
+              : []
         issues.push(...parsedIssues)
         continue
       }
@@ -551,33 +566,37 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     throw new RequestValidationError(issues)
   }
 
-  const totalTextLength = messages.reduce((sum, message) => (
-    sum + message.parts.reduce((partSum, part) => (
-      part.type === "text" ? partSum + part.text.length : partSum
-    ), 0)
-  ), 0)
+  const totalTextLength = messages.reduce(
+    (sum, message) =>
+      sum +
+      message.parts.reduce(
+        (partSum, part) => (part.type === "text" ? partSum + part.text.length : partSum),
+        0
+      ),
+    0
+  )
 
   if (messages.length === 0) {
     throw new RequestValidationError([
       {
         field: "messages",
-        message: "Messages must include at least one supported message."
-      }
+        message: "Messages must include at least one supported message.",
+      },
     ])
   }
 
   const lastMessage = messages[messages.length - 1]
   const hasUserMessage = messages.some((message) => message.role === "user")
-  const hasLastUserText = lastMessage?.role === "user" && lastMessage.parts.some((part) => (
-    part.type === "text" && part.text.trim().length > 0
-  ))
+  const hasLastUserText =
+    lastMessage?.role === "user" &&
+    lastMessage.parts.some((part) => part.type === "text" && part.text.trim().length > 0)
 
   if (!hasUserMessage) {
     throw new RequestValidationError([
       {
         field: "messages",
-        message: "Messages must include at least one user message."
-      }
+        message: "Messages must include at least one user message.",
+      },
     ])
   }
 
@@ -585,8 +604,8 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     throw new RequestValidationError([
       {
         field: "messages[last].role",
-        message: "The latest message must be from the user."
-      }
+        message: "The latest message must be from the user.",
+      },
     ])
   }
 
@@ -594,8 +613,8 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     throw new RequestValidationError([
       {
         field: "messages[last]",
-        message: "The latest user message must include a non-empty text part."
-      }
+        message: "The latest user message must include a non-empty text part.",
+      },
     ])
   }
 
@@ -603,8 +622,8 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     throw new RequestValidationError([
       {
         field: "messages",
-        message: `Total prompt text must be ${MAX_TOTAL_TEXT_LENGTH} characters or fewer.`
-      }
+        message: `Total prompt text must be ${MAX_TOTAL_TEXT_LENGTH} characters or fewer.`,
+      },
     ])
   }
 
@@ -618,8 +637,9 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     throw new RequestValidationError([
       {
         field: "messages[last]",
-        message: "The latest user message appears to contain prompt-injection or instruction-override content."
-      }
+        message:
+          "The latest user message appears to contain prompt-injection or instruction-override content.",
+      },
     ])
   }
 
@@ -635,9 +655,7 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     !modelProviderResult.ok ||
     !styleIntensityResult.ok
   ) {
-    throw new RequestValidationError([
-      { field: "body", message: "Request validation failed." }
-    ])
+    throw new RequestValidationError([{ field: "body", message: "Request validation failed." }])
   }
 
   return {
@@ -651,21 +669,21 @@ export function parseProjectPostBody(input: unknown): ProjectPostBody {
     layoutComplexity: layoutComplexityResult.value,
     modelProvider: modelProviderResult.value,
     styleIntensity: styleIntensityResult.value,
-    messages
+    messages,
   }
 }
 
 export function parseAuthPostBody(input: unknown): AuthPostBody {
   if (!isRecord(input)) {
     throw new RequestValidationError([
-      { field: "body", message: "Request body must be a JSON object." }
+      { field: "body", message: "Request body must be a JSON object." },
     ])
   }
 
   const action = input.action
   if (action !== "sign-in" && action !== "sign-up" && action !== "sync-token") {
     throw new RequestValidationError([
-      { field: "action", message: "Action must be sign-in, sign-up, or sync-token." }
+      { field: "action", message: "Action must be sign-in, sign-up, or sync-token." },
     ])
   }
 
@@ -687,33 +705,33 @@ export function parseAuthPostBody(input: unknown): AuthPostBody {
     return {
       action,
       email: input.email as string,
-      password: input.password as string
+      password: input.password as string,
     }
   }
 
   if (input.user !== undefined) {
     if (!isRecord(input.user)) {
       throw new RequestValidationError([
-        { field: "user", message: "User must be an object when provided." }
+        { field: "user", message: "User must be an object when provided." },
       ])
     }
 
     if (typeof input.user.id !== "string" || !input.user.id.trim()) {
       throw new RequestValidationError([
-        { field: "user.id", message: "User ID must be a non-empty string." }
+        { field: "user.id", message: "User ID must be a non-empty string." },
       ])
     }
 
     if (typeof input.user.email !== "string" || !input.user.email.trim()) {
       throw new RequestValidationError([
-        { field: "user.email", message: "User email must be a non-empty string." }
+        { field: "user.email", message: "User email must be a non-empty string." },
       ])
     }
   }
 
   return {
     action: "sync-token",
-    ...(input.user ? { user: input.user as { id: string; email: string; profile?: unknown } } : {})
+    ...(input.user ? { user: input.user as { id: string; email: string; profile?: unknown } } : {}),
   }
 }
 
@@ -725,12 +743,12 @@ export function parseSlugRouteParams(input: unknown) {
   }
 
   return {
-    slugId: slugIdResult.value
+    slugId: slugIdResult.value,
   }
 }
 
 export function createValidationErrorResponse(error: RequestValidationError) {
   return createErrorResponse(400, "INVALID_REQUEST", "Invalid request", {
-    issues: error.issues
+    issues: error.issues,
   })
 }

@@ -6,7 +6,7 @@ export const ALLOWED_FILE_MIME_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
-  "image/gif"
+  "image/gif",
 ] as const
 
 export const ALLOWED_FILE_ACCEPT = ALLOWED_FILE_MIME_TYPES.join(",")
@@ -15,5 +15,5 @@ export const MIME_EXTENSIONS: Record<(typeof ALLOWED_FILE_MIME_TYPES)[number], s
   "image/jpeg": [".jpg", ".jpeg"],
   "image/png": [".png"],
   "image/webp": [".webp"],
-  "image/gif": [".gif"]
+  "image/gif": [".gif"],
 }

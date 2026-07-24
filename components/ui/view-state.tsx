@@ -1,21 +1,21 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { AlertCircleIcon, InboxIcon, LoaderCircleIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ReactNode } from "react"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { AlertCircleIcon, InboxIcon, LoaderCircleIcon } from "lucide-react"
 
 type ViewStateProps = {
-  className?: string | undefined;
-  title: string;
-  description: string;
-  icon?: ReactNode | undefined;
-  tone?: "default" | "error" | undefined;
-  actionLabel?: string | undefined;
-  onAction?: (() => void) | undefined;
-  secondaryActionLabel?: string | undefined;
-  onSecondaryAction?: (() => void) | undefined;
-};
+  className?: string | undefined
+  title: string
+  description: string
+  icon?: ReactNode | undefined
+  tone?: "default" | "error" | undefined
+  actionLabel?: string | undefined
+  onAction?: (() => void) | undefined
+  secondaryActionLabel?: string | undefined
+  onSecondaryAction?: (() => void) | undefined
+}
 
 export const ViewState = ({
   className,
@@ -28,15 +28,13 @@ export const ViewState = ({
   secondaryActionLabel,
   onSecondaryAction,
 }: ViewStateProps) => {
-  const isError = tone === "error";
+  const isError = tone === "error"
 
   return (
     <div
       className={cn(
         "flex min-h-[280px] w-full flex-col items-center justify-center rounded-2xl border px-6 py-10 text-center",
-        isError
-          ? "border-destructive/20 bg-destructive/5"
-          : "border-border/60 bg-muted/20",
+        isError ? "border-destructive/20 bg-destructive/5" : "border-border/60 bg-muted/20",
         className
       )}
     >
@@ -51,8 +49,8 @@ export const ViewState = ({
         {icon}
       </div>
       <div className="max-w-md space-y-2">
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+        <h3 className="text-foreground text-base font-semibold">{title}</h3>
+        <p className="text-muted-foreground text-sm leading-6">{description}</p>
       </div>
       {(actionLabel || secondaryActionLabel) && (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -62,19 +60,15 @@ export const ViewState = ({
             </Button>
           )}
           {secondaryActionLabel && onSecondaryAction && (
-            <Button
-              onClick={onSecondaryAction}
-              size="sm"
-              variant={isError ? "outline" : "ghost"}
-            >
+            <Button onClick={onSecondaryAction} size="sm" variant={isError ? "outline" : "ghost"}>
               {secondaryActionLabel}
             </Button>
           )}
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
 export const LoadingState = ({
   className,
@@ -87,7 +81,7 @@ export const LoadingState = ({
     description={description}
     icon={<LoaderCircleIcon className="size-5 animate-spin" />}
   />
-);
+)
 
 export const EmptyState = ({
   className,
@@ -102,7 +96,7 @@ export const EmptyState = ({
     icon={<InboxIcon className="size-5" />}
     {...props}
   />
-);
+)
 
 export const ErrorState = ({
   className,
@@ -118,4 +112,4 @@ export const ErrorState = ({
     icon={<AlertCircleIcon className="size-5" />}
     {...props}
   />
-);
+)

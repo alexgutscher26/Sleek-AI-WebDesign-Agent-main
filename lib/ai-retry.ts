@@ -70,9 +70,10 @@ export const isProviderUnreachableError = (error: unknown): boolean => {
     return true
   }
 
-  const status = "status" in (error as Record<string, unknown>)
-    ? Number((error as Record<string, unknown>).status)
-    : NaN
+  const status =
+    "status" in (error as Record<string, unknown>)
+      ? Number((error as Record<string, unknown>).status)
+      : NaN
   if (Number.isFinite(status) && UNREACHABLE_STATUS_CODES.has(status)) {
     return true
   }
@@ -91,7 +92,7 @@ export const isProviderUnreachableError = (error: unknown): boolean => {
     "fetch failed",
     "network error",
     "failed to fetch",
-    "connection refused"
+    "connection refused",
   ].some((needle) => message.includes(needle))
 }
 
@@ -105,9 +106,10 @@ export const isTransientAiError = (error: unknown) => {
     return true
   }
 
-  const causeStatus = "cause" in error && error.cause && typeof error.cause === "object" && "status" in error.cause
-    ? Number((error.cause as { status?: unknown }).status)
-    : NaN
+  const causeStatus =
+    "cause" in error && error.cause && typeof error.cause === "object" && "status" in error.cause
+      ? Number((error.cause as { status?: unknown }).status)
+      : NaN
 
   if (Number.isFinite(causeStatus) && TRANSIENT_STATUS_CODES.has(causeStatus)) {
     return true
@@ -134,7 +136,7 @@ export const isTransientAiError = (error: unknown) => {
     "bad gateway",
     "gateway timeout",
     "overloaded",
-    "try again"
+    "try again",
   ].some((needle) => message.includes(needle))
 }
 
@@ -149,13 +151,10 @@ export async function createChatCompletionWithRetries<T = unknown>(
     initialDelayMs = 350,
     signal,
     fallbackCompletion,
-    fallbackModel
+    fallbackModel,
   } = retryOptions
 
-  const modelsToTry = [
-    options.model,
-    ...fallbackModels.filter((model) => model !== options.model)
-  ]
+  const modelsToTry = [options.model, ...fallbackModels.filter((model) => model !== options.model)]
 
   let lastError: unknown
 
@@ -168,7 +167,7 @@ export async function createChatCompletionWithRetries<T = unknown>(
       try {
         return await createCompletion<T>({
           ...options,
-          model
+          model,
         })
       } catch (error) {
         lastError = error
@@ -192,12 +191,12 @@ export async function createChatCompletionWithRetries<T = unknown>(
         fallbackCompletion,
         {
           ...options,
-          model: fallbackModel || options.model
+          model: fallbackModel || options.model,
         },
         {
           maxAttemptsPerModel: 2,
           initialDelayMs,
-          signal
+          signal,
         }
       )
     } catch (fallbackError) {
@@ -216,4 +215,3 @@ export async function createChatCompletionWithRetries<T = unknown>(
 
   throw lastError
 }
-

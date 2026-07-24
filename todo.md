@@ -1,6 +1,7 @@
 # Sleek AI Web Design Agent — Master Roadmap and TODO
 
 ## Version: 2.0 | Last Updated: 2026-07-14 | Project: ai-webdesign-agent
+
 ## Stack: Next.js 16 · React 19 · TypeScript · Tailwind CSS v4 · Clerk · Neon/Postgres · Vercel AI SDK · shadcn/ui
 
 ---
@@ -46,14 +47,22 @@
 
 ## VISION AND GOALS
 
-- [ ] Build Sleek into the definitive AI design engine for web, mobile UI, and growth assets
-- [ ] Support end-to-end workflow: idea -> design system -> multi-platform screens -> launch-ready marketing
-- [ ] Ensure outputs are production-quality, exportable, and reusable across teams and projects
-- [ ] Become the fastest path from natural-language prompt to shippable, pixel-perfect UI
-- [ ] Support solo developers, design teams, and enterprise workflows with a single unified platform
-- [ ] Achieve best-in-class generation quality across all output types (web, mobile, icons, screenshots, social)
-- [ ] Build a thriving template ecosystem with community contributions and curated industry packs
-- [ ] Establish a monetization model that is fair, transparent, and scalable from free to enterprise tiers
+- [ ] Build Sleek into the definitive AI design engine for web, mobile UI, and
+      growth assets
+- [ ] Support end-to-end workflow: idea -> design system -> multi-platform
+      screens -> launch-ready marketing
+- [ ] Ensure outputs are production-quality, exportable, and reusable across
+      teams and projects
+- [ ] Become the fastest path from natural-language prompt to shippable,
+      pixel-perfect UI
+- [ ] Support solo developers, design teams, and enterprise workflows with a
+      single unified platform
+- [ ] Achieve best-in-class generation quality across all output types (web,
+      mobile, icons, screenshots, social)
+- [ ] Build a thriving template ecosystem with community contributions and
+      curated industry packs
+- [ ] Establish a monetization model that is fair, transparent, and scalable
+      from free to enterprise tiers
 
 ---
 
@@ -61,13 +70,15 @@
 
 - [ ] Assign an owner and a target due date to every item
 - [ ] Label every item: P0, P1, P2, P3 for priority triage
-- [ ] Add status labels to every item: todo, in-progress, blocked, done, cancelled
+- [ ] Add status labels to every item: todo, in-progress, blocked, done,
+      cancelled
 - [ ] Create a weekly triage ritual for the top 15 highest-priority items
 - [ ] Review and re-score the entire roadmap every calendar month
 - [ ] Add at least one KPI target to each major epic
 - [ ] Link every completed task to its associated commit hash or PR number
 - [ ] Track velocity per sprint with team-visible burn-down charts
-- [ ] Maintain a separate rejected ideas log with reasoning to avoid re-discussion
+- [ ] Maintain a separate rejected ideas log with reasoning to avoid
+      re-discussion
 - [ ] Document breaking changes and migration notes in a CHANGELOG.md file
 - [ ] Hold a quarterly roadmap review with all stakeholders
 
@@ -79,7 +90,8 @@
 
 ### Streaming and Generation Pipeline
 
-- [x] Fix message conversion issue in app/action/action.ts (text part mapping mismatch)
+- [x] Fix message conversion issue in app/action/action.ts (text part mapping
+      mismatch)
 - [x] Add strict request validation in POST /api/project
 - [x] Add ownership checks for project/page access by slugId
 - [x] Add route-level schema validation for all APIs
@@ -99,17 +111,22 @@
 - [x] Add secure defaults for all environment variables
 - [x] Remove hardcoded production fallback base URL
 - [x] Add boot-time config validation with fail-fast logging
-- [x] Add graceful degradation when AI provider is unreachable (fallbacrovider or queued retry)
+- [x] Add graceful degradation when AI provider is unreachable (fallbacrovider
+      or queued retry)
 - [x] Add stream heartbeat mechanism to detect zombie connections
 - [x] Add automatic stream reconnection on client network drop
 - [x] Add server-side stream timeout escalation (warn -> abort -> cleanup)
 - [x] Add partial result recovery to avoid full re-generation on minor failures
-- [x] Validate that position fields never produce duplicate orderings after concurrent saves
+- [x] Validate that position fields never produce duplicate orderings after
+      concurrent saves
 - [x] Add DB constraint to prevent orphan pages without a parent project
-- [x] Fix any Postgres connection pool exhaustion under concurrent generation load
-- [x] Add structured error codes to all API error responses for client-side handling
+- [x] Fix any Postgres connection pool exhaustion under concurrent generation
+      load
+- [x] Add structured error codes to all API error responses for client-side
+      handling
 - [x] Audit all Promise chains for unhandled rejections and add global handler
-- [x] Add React error boundaries around all major UI sections (canvas, chat, sidebar)
+- [x] Add React error boundaries around all major UI sections (canvas, chat,
+      sidebar)
 
 ### Data Integrity
 
@@ -124,14 +141,17 @@
 ### TypeScript and Code Quality
 
 - [ ] Enable strict: true mode fully in tsconfig.json and resolve all violations
-- [ ] Remove all remaining @ts-ignore and @ts-expect-error comments with proper fixes
+- [ ] Remove all remaining @ts-ignore and @ts-expect-error comments with proper
+      fixes
 - [x] Add eslint-plugin-unicorn for additional code quality rules
 - [x] Add eslint-plugin-react-hooks exhaustive-deps rule enforcement
 - [x] Enable noUncheckedIndexedAccess in TypeScript config
 - [x] Enable exactOptionalPropertyTypes in TypeScript config
 - [x] Add Zod schema validation for all environment variable access at startup
-- [x] Audit lib/prompt.ts (36KB) — split into domain-specific modules per generation mode
-- [x] Audit components/chat/index.tsx (29KB) — decompose into focused sub-components
+- [x] Audit lib/prompt.ts (36KB) — split into domain-specific modules per
+      generation mode
+- [x] Audit components/chat/index.tsx (29KB) — decompose into focused
+      sub-components
 
 ---
 
@@ -151,7 +171,8 @@
 - [x] Add signed URL flow for file uploads
 - [x] Add prompt injection detection and mitigation rules
 - [x] Add model output sanitization before persistence
-- [ ] Add role-based access controls for future team workspaces (owner, admin, editor, viewer)
+- [ ] Add role-based access controls for future team workspaces (owner, admin,
+      editor, viewer)
 - [ ] Add privacy retention policy for user prompts and uploaded images
 - [ ] Add secure deletion workflow for all user-generated data
 - [ ] Add suspicious activity alerts and automatic account lockouts
@@ -174,7 +195,8 @@
 ### Generated Content Security
 
 - [ ] Sandbox generated HTML in a CSP-restricted iframe with sandbox attribute
-- [ ] Strip all script tags from generated content regardless of sanitization pass
+- [ ] Strip all script tags from generated content regardless of sanitization
+      pass
 - [ ] Validate all generated href links to prevent javascript: injections
 - [ ] Add allowlist-based HTML tag filtering for generated content
 - [ ] Verify that generated CSS cannot exfiltrate data via external resources
@@ -195,7 +217,7 @@
 - [x] Add duplicate/rename/reorder page controls
 - [x] Add first-run setup wizard for Insforge config
 - [ ] Add project archive and restore flows with confirmation dialogs
-- [ ] Add autosave indicator with last-saved timestamp in the header
+- [x] Add autosave indicator with last-saved timestamp in the header
 - [ ] Add project search and filter on the home/dashboard screen
 - [ ] Add sort options for projects: newest, last updated, alphabetical, starred
 - [ ] Add compact/comfortable/spacious density toggle for the project list
@@ -258,7 +280,8 @@
 
 ### Generation Controls and Parameters
 
-- [x] Add selectable generation modes: landing, dashboard, auth, docs, ecommerce, portfolio
+- [x] Add selectable generation modes: landing, dashboard, auth, docs,
+      ecommerce, portfolio
 - [x] Add style intensity controls: minimal, balanced, bold, maximalist
 - [x] Add creativity controls: strict-to-prompt to exploratory
 - [x] Add layout complexity controls: simple, standard, complex, grid-heavy
@@ -266,10 +289,13 @@
 - [x] Add model provider selector with cost/latency/quality hints
 - [x] Add prompt improvement assistant before generation
 - [x] Add auto-clarifying questions when prompt is vague or underspecified
-- [ ] Add structured constraints input: brand colors, spacing scale, typography, radius tokens
+- [ ] Add structured constraints input: brand colors, spacing scale, typography,
+      radius tokens
 - [ ] Add preserve-elements lock for targeted regeneration of specific sections
-- [ ] Add section-scoped regenerate: hero only, pricing only, FAQ only, footer only
-- [ ] Add semantic quality checker for generated markup (accessibility tree validation)
+- [ ] Add section-scoped regenerate: hero only, pricing only, FAQ only, footer
+      only
+- [ ] Add semantic quality checker for generated markup (accessibility tree
+      validation)
 - [ ] Add accessibility pass before save (WCAG AA minimum gate)
 - [ ] Add visual hierarchy quality score on completed generation
 - [ ] Add regeneration confidence score with per-section warnings
@@ -284,7 +310,8 @@
 - [ ] Add color palette extraction from reference images
 - [ ] Add font pairing AI suggestions based on brand style keywords
 - [ ] Add animation intent controls: static, subtle, animated, interactive
-- [ ] Add responsive breakpoint strategy selector (mobile-first, desktop-first, adaptive)
+- [ ] Add responsive breakpoint strategy selector (mobile-first, desktop-first,
+      adaptive)
 - [ ] Add dark mode variant generation alongside light mode by default
 
 ### Generation Pipeline Architecture
@@ -293,8 +320,10 @@
 - [ ] Add streaming progress indicators for each generation phase
 - [ ] Add generation queue UI with estimated wait time during high load
 - [ ] Add abort generation button that safely cancels and cleans up
-- [ ] Add generation telemetry: prompt tokens, completion tokens, latency per phase
-- [ ] Add model fallback chain: primary model -> secondary -> tertiary on failure
+- [ ] Add generation telemetry: prompt tokens, completion tokens, latency per
+      phase
+- [ ] Add model fallback chain: primary model -> secondary -> tertiary on
+      failure
 - [ ] Add per-model prompt optimization (Claude, GPT-4o, Gemini variants)
 - [ ] Add generation caching for identical prompts within the same project
 - [ ] Add parallel page generation for multi-page requests
@@ -303,11 +332,13 @@
 ### Output Quality
 
 - [ ] Add HTML/CSS beautifier pass to all generated output for readability
-- [ ] Add semantic HTML5 element enforcement (use main, section, article elements)
+- [ ] Add semantic HTML5 element enforcement (use main, section, article
+      elements)
 - [ ] Add responsive design enforcement for all generated layouts
 - [ ] Add image placeholder system with realistic aspect ratios and alt text
 - [ ] Add realistic dummy data injection (names, prices, dates, descriptions)
-- [ ] Add icon rendering using Lucide or Phosphor icon library in generated pages
+- [ ] Add icon rendering using Lucide or Phosphor icon library in generated
+      pages
 - [ ] Add Google Fonts import with optimal display=swap strategy
 - [ ] Add CSS custom property output for generated design tokens
 - [ ] Add smooth scroll behavior and anchor link support in generated pages
@@ -330,15 +361,18 @@
 - [ ] Add prompt_templates table with tags, versions, and usage counts
 - [ ] Add design_token_sets table per workspace for brand tokens
 - [ ] Add project_collaborators table for future team workspace features
-- [ ] Add comments table with thread support, pinned position, and resolution status
+- [ ] Add comments table with thread support, pinned position, and resolution
+      status
 - [ ] Add export_bundles table for tracking generated zip exports
 - [ ] Add webhook_subscriptions table for external automation triggers
 - [ ] Add soft delete (deleted_at column) for all major entities
 - [ ] Add archival timestamps and archival reason fields
 - [ ] Add tags table with many-to-many relationship to projects and templates
-- [ ] Add index optimization review — ensure all WHERE clause columns are indexed
+- [ ] Add index optimization review — ensure all WHERE clause columns are
+      indexed
 - [ ] Add EXPLAIN ANALYZE query audit for all hot-path DB queries
-- [ ] Add connection pooling configuration via PgBouncer or Neon's built-in pooler
+- [ ] Add connection pooling configuration via PgBouncer or Neon's built-in
+      pooler
 - [ ] Add database migration tooling (e.g., db-migrate or Drizzle migrations)
 
 ### REST and Server Action APIs
@@ -346,7 +380,8 @@
 - [ ] Add pagination support for projects list API (cursor-based, limit/offset)
 - [ ] Add pagination support for messages list API per project
 - [ ] Add pagination support for pages list API per project
-- [ ] Add filtering API for projects by date range, model used, and generation mode
+- [ ] Add filtering API for projects by date range, model used, and generation
+      mode
 - [ ] Add search API for projects by name and description full-text search
 - [ ] Add webhook/event stream for generation run status updates
 - [ ] Add API versioning strategy with /api/v1/ prefix and compatibility shims
@@ -362,7 +397,8 @@
 
 ### Logging and Tracing
 
-- [ ] Add structured JSON logging for all request and generation lifecycle events
+- [ ] Add structured JSON logging for all request and generation lifecycle
+      events
 - [ ] Add correlation IDs (X-Request-ID) for full traceability across services
 - [ ] Add distributed tracing integration (OpenTelemetry -> Jaeger or Tempo)
 - [ ] Add log level configuration via environment variable (LOG_LEVEL)
@@ -426,7 +462,8 @@
 
 - [ ] Add component tests for components/chat/chat-input.tsx — input behaviors
 - [ ] Add component tests for components/chat/chat-panel.tsx — message rendering
-- [ ] Add component tests for components/global-command-palette.tsx — keyboard nav
+- [ ] Add component tests for components/global-command-palette.tsx — keyboard
+      nav
 - [ ] Add component tests for components/header.tsx — auth state display
 - [ ] Add component tests for canvas drag/zoom/pan interactions
 - [ ] Add component tests for page controls (duplicate, delete, reorder)
@@ -435,7 +472,8 @@
 ### End-to-End Tests (Playwright)
 
 - [ ] Add E2E test: new user sign-up -> onboarding -> first generation complete
-- [ ] Add E2E test: create project -> generate page -> view on canvas -> download
+- [ ] Add E2E test: create project -> generate page -> view on canvas ->
+      download
 - [ ] Add E2E test: regenerate page -> compare versions -> revert to previous
 - [ ] Add E2E test: upload image reference -> generate matching design
 - [ ] Add E2E test: project search and filter on dashboard
@@ -480,15 +518,18 @@
 
 - [ ] Add dynamic import() code splitting for heavy components (canvas, palette)
 - [ ] Add React.lazy and Suspense boundaries for route-level code splitting
-- [ ] Add next/image optimization for all images with width, height, and priority
+- [ ] Add next/image optimization for all images with width, height, and
+      priority
 - [ ] Add font subsetting and font-display:swap for all Google Font imports
 - [ ] Add Link component prefetching for high-probability navigation routes
 - [ ] Add React.memo and useMemo optimization for expensive canvas renders
-- [ ] Add virtualized list rendering for long project lists and long chat histories
+- [ ] Add virtualized list rendering for long project lists and long chat
+      histories
 - [ ] Add useTransition for non-urgent state updates in chat and canvas
 - [ ] Add startTransition wrapper for search/filter debounce updates
 - [ ] Add Web Worker for heavy HTML processing to avoid main thread blocking
-- [ ] Audit and reduce bundle size: remove unused Radix primitives, consolidate icons
+- [ ] Audit and reduce bundle size: remove unused Radix primitives, consolidate
+      icons
 - [ ] Add preconnect links for all external resource origins
 
 ### Backend Performance
@@ -520,14 +561,19 @@
 
 - [x] Add mobile-app generation mode to the mode selector
 - [x] Add platform selector: iOS, Android, cross-platform
-- [ ] Add design system selector: Cupertino (iOS), Material 3 (Android), custom hybrid
-- [ ] Add mobile-first prompt schema with app type, audience segment, and user flows
-- [ ] Add screen map planner: onboarding -> auth -> home -> detail -> settings -> profile
+- [ ] Add design system selector: Cupertino (iOS), Material 3 (Android), custom
+      hybrid
+- [ ] Add mobile-first prompt schema with app type, audience segment, and user
+      flows
+- [ ] Add screen map planner: onboarding -> auth -> home -> detail -> settings
+      -> profile
 - [ ] Add multi-screen generation in a single run (up to 8 screens)
-- [ ] Add navigation pattern selector: tab bar, stack, drawer, bottom sheet, custom
+- [ ] Add navigation pattern selector: tab bar, stack, drawer, bottom sheet,
+      custom
 - [ ] Add component library tuned for mobile-native UI patterns
 - [ ] Add gesture-aware layout directives in generated output
-- [ ] Add safe area awareness for generated screens (notch, home indicator, status bar)
+- [ ] Add safe area awareness for generated screens (notch, home indicator,
+      status bar)
 - [ ] Add Dynamic Island and rounded corner safe spacing rules
 - [ ] Add keyboard avoidance and input focus state handling in generated layouts
 - [ ] Add scroll behavior directives: paging, momentum, sticky headers
@@ -541,32 +587,47 @@
 - [ ] Add onboarding carousel (3-5 step) screen templates
 - [ ] Add profile / account settings / preferences screen templates
 - [ ] Add dashboard / home feed / activity stream screen templates
-- [ ] Add ecommerce: product listing, detail, cart, checkout, order confirmation templates
-- [ ] Add fintech: wallet overview, transaction list, send/receive, card management templates
-- [ ] Add booking: search, calendar picker, time picker, confirmation, receipt templates
-- [ ] Add social: feed, post detail, DM chat, story viewer, explore grid templates
-- [ ] Add fitness: workout tracker, stats dashboard, progress charts, goals screen templates
-- [ ] Add healthcare: appointment list, booking, health summary, medication tracker templates
-- [ ] Add music/media: player, playlist, album detail, artist page, library templates
-- [ ] Add map/location: map view, location search, pin detail, directions templates
+- [ ] Add ecommerce: product listing, detail, cart, checkout, order confirmation
+      templates
+- [ ] Add fintech: wallet overview, transaction list, send/receive, card
+      management templates
+- [ ] Add booking: search, calendar picker, time picker, confirmation, receipt
+      templates
+- [ ] Add social: feed, post detail, DM chat, story viewer, explore grid
+      templates
+- [ ] Add fitness: workout tracker, stats dashboard, progress charts, goals
+      screen templates
+- [ ] Add healthcare: appointment list, booking, health summary, medication
+      tracker templates
+- [ ] Add music/media: player, playlist, album detail, artist page, library
+      templates
+- [ ] Add map/location: map view, location search, pin detail, directions
+      templates
 - [ ] Add notification center templates with grouped/ungrouped styles
 - [ ] Add subscription / paywall / upsell screen templates
 - [ ] Add empty states, error states, offline states, loading skeleton templates
 - [ ] Add settings list screen with toggles, pickers, and section headers
-- [ ] Add onboarding permission request screen templates (notifications, location, camera)
+- [ ] Add onboarding permission request screen templates (notifications,
+      location, camera)
 
 ### Mobile Quality Standards
 
-- [ ] Add viewport checks for common phone sizes (375px, 390px, 414px, 430px width)
+- [ ] Add viewport checks for common phone sizes (375px, 390px, 414px, 430px
+      width)
 - [ ] Add touch target size compliance check (minimum 44x44pt)
-- [ ] Add contrast and readability check for outdoor/high-brightness environments
-- [ ] Add status bar style adaptation rules (light/dark content based on background color)
-- [ ] Add orientation support directives (portrait-only, landscape-supported, adaptive)
+- [ ] Add contrast and readability check for outdoor/high-brightness
+      environments
+- [ ] Add status bar style adaptation rules (light/dark content based on
+      background color)
+- [ ] Add orientation support directives (portrait-only, landscape-supported,
+      adaptive)
 - [ ] Add RTL support rules for Arabic, Hebrew, Persian language markets
 - [ ] Add mobile accessibility checks: VoiceOver/TalkBack semantic roles, labels
-- [ ] Add localization-ready constraints for text labels that expand in other languages
+- [ ] Add localization-ready constraints for text labels that expand in other
+      languages
 - [ ] Add thumb zone heatmap overlay for interactive element placement
-- [ ] Add minimum font size enforcement (11pt / ~14px minimum for mobile readability)
+- [ ] Add minimum font size enforcement (11pt / ~14px minimum for mobile
+      readability)
 - [ ] Add line height and letter spacing standards for mobile typography
 
 ### Mobile Export Paths
@@ -589,9 +650,11 @@
 - [ ] Add screenshot storyboard generator from app description or flow input
 - [ ] Add region strategy templates: US, EU, Japan, Brazil, India, MENA
 - [ ] Add localization copy slots in each screenshot panel for translation
-- [ ] Add tone style selector: bold/energetic, clean/minimal, playful/fun, premium/luxury
+- [ ] Add tone style selector: bold/energetic, clean/minimal, playful/fun,
+      premium/luxury
 - [ ] Add visual campaign consistency check across all 8 screenshot panels
-- [ ] Add screenshot narrative arc guidance (problem -> solution -> benefit -> CTA)
+- [ ] Add screenshot narrative arc guidance (problem -> solution -> benefit ->
+      CTA)
 - [ ] Add A/B screenshot set generation (two visual approaches per app)
 
 ### iOS Screenshot Generation
@@ -622,9 +685,11 @@
 - [ ] Add AI headline generator for each screenshot panel (benefit-focused)
 - [ ] Add feature priority sequencer for panel 1-8 storytelling order
 - [ ] Add automatic copy length fitting and line-break optimization
-- [ ] Add icon and illustration accent library for screenshot decorative overlays
+- [ ] Add icon and illustration accent library for screenshot decorative
+      overlays
 - [ ] Add visual badges: New, AI-Powered, Offline, Secure, #1 Rated
-- [ ] Add social proof callout overlays: star ratings, download counts, award badges
+- [ ] Add social proof callout overlays: star ratings, download counts, award
+      badges
 - [ ] Add legal/disclaimer text placement at minimum readable size
 - [ ] Add brand color consistency check against workspace token set
 - [ ] Add gradient and background texture library for screenshot backgrounds
@@ -639,7 +704,8 @@
 - [ ] Add reject list: flag any screenshot that fails store size constraints
 - [ ] Add final submission readiness checklist report
 - [ ] Add Google Play Feature Graphic (1024x500) generator
-- [ ] Add App Store promotional artwork (2048x2732) generator for featured placement
+- [ ] Add App Store promotional artwork (2048x2732) generator for featured
+      placement
 
 ---
 
@@ -662,15 +728,18 @@
 - [ ] Add bold startup preset (high contrast, geometric shapes, strong type)
 - [ ] Add playful indie hacker preset (doodles, bright accents, informal type)
 - [ ] Add premium SaaS preset (dark, glassmorphism, refined spacing)
-- [ ] Add dark cinematic preset (deep blacks, neon accents, dramatic composition)
-- [ ] Add minimal Notion-style preset (off-white, simple icons, generous whitespace)
+- [ ] Add dark cinematic preset (deep blacks, neon accents, dramatic
+      composition)
+- [ ] Add minimal Notion-style preset (off-white, simple icons, generous
+      whitespace)
 
 ### Launch Copy and Messaging
 
 - [ ] Add tagline generator with 5-10 variants for A/B testing
 - [ ] Add short value proposition variants for thumbnail text layers
 - [ ] Add benefit bullets generator for gallery panel copy
-- [ ] Add launch CTA variants: Upvote, Try Free, Leave Feedback, Get Early Access
+- [ ] Add launch CTA variants: Upvote, Try Free, Leave Feedback, Get Early
+      Access
 - [ ] Add social teaser copy pairing for each generated image asset
 - [ ] Add email announcement copy generator for newsletter list
 - [ ] Add Discord/Slack launch announcement copy generator
@@ -693,7 +762,8 @@
 - [ ] Add changelog/release visual card generator (structured weekly cadence)
 - [ ] Add blog header image generator (1600x900 editorial style)
 - [ ] Add email header/banner generator for Mailchimp, ConvertKit, Beehiiv
-- [ ] Add case study visual template generator (hero, stats, testimonial, result)
+- [ ] Add case study visual template generator (hero, stats, testimonial,
+      result)
 - [ ] Add webinar/event registration cover generator
 - [ ] Add partner co-marketing asset templates with dual branding
 - [ ] Add seasonal campaign template sets (holiday, back-to-school, Q4 push)
@@ -706,11 +776,14 @@
 ### Thumbnail Generation Core
 
 - [ ] Add thumbnail mode with platform presets in the mode selector
-- [ ] Add visual style selector: minimal, high-contrast, editorial, neon, cinematic
+- [ ] Add visual style selector: minimal, high-contrast, editorial, neon,
+      cinematic
 - [ ] Add subject focal point composition controls
 - [ ] Add text hierarchy layer system: hook (H1), sub-hook (H2), badge accent
-- [ ] Add A/B thumbnail variant generation (2-4 visual approaches simultaneously)
-- [ ] Add emotional/intent style tags: urgent, curiosity, authority, FOMO, delight
+- [ ] Add A/B thumbnail variant generation (2-4 visual approaches
+      simultaneously)
+- [ ] Add emotional/intent style tags: urgent, curiosity, authority, FOMO,
+      delight
 - [ ] Add face-on / face-off composition variants for talking-head videos
 - [ ] Add color temperature controls: warm, neutral, cool, neon
 - [ ] Add background isolation and blur depth controls
@@ -747,13 +820,15 @@
 ### App Icon Generation
 
 - [ ] Add iOS app icon pack generator for all required sizes (20-1024pt)
-- [ ] Add Android adaptive icon generator: foreground layer + background layer + monochrome
+- [ ] Add Android adaptive icon generator: foreground layer + background layer +
+      monochrome
 - [ ] Add monochrome/tinted icon variant for iOS 18 adaptive icon support
 - [ ] Add macOS app icon with drop-shadow-ready transparent background
 - [ ] Add rounded corner mask simulation preview for iOS icon shape
 - [ ] Add Watch app icon sizes (watchOS complication and app icon)
 - [ ] Add icon legibility check at smallest display size (20x20)
-- [ ] Add icon style presets: flat, gradient, glass/frosted, glyph, 3D, minimalist
+- [ ] Add icon style presets: flat, gradient, glass/frosted, glyph, 3D,
+      minimalist
 - [ ] Add auto-export with platform-standard folder structure
 
 ### Brand Icon and Logo Kits
@@ -771,7 +846,8 @@
 ### Illustration and Decorative Asset Generation
 
 - [ ] Add hero illustration generator for landing pages
-- [ ] Add spot illustration pack generator (empty state, success, error, loading)
+- [ ] Add spot illustration pack generator (empty state, success, error,
+      loading)
 - [ ] Add abstract geometric background generator
 - [ ] Add pattern/texture tile generator for UI backgrounds
 - [ ] Add custom emoji / sticker set generator for brand communications
@@ -782,25 +858,32 @@
 
 ### Brand Profile Setup
 
-- [ ] Add brand profile setup wizard: voice, color palette, typography, imagery style
+- [ ] Add brand profile setup wizard: voice, color palette, typography, imagery
+      style
 - [ ] Add multiple brand kits per workspace for agency multi-client workflows
-- [ ] Add brand token lock mode for strict consistency enforcement across generations
-- [ ] Add creative direction mood board builder (reference images + style constraints)
-- [ ] Add reusable style presets by project type (SaaS, ecommerce, fintech, health)
+- [ ] Add brand token lock mode for strict consistency enforcement across
+      generations
+- [ ] Add creative direction mood board builder (reference images + style
+      constraints)
+- [ ] Add reusable style presets by project type (SaaS, ecommerce, fintech,
+      health)
 - [ ] Add automatic brand compliance checker for all generated outputs
-- [ ] Add prohibited style rules: avoid specific colors, fonts, or layout patterns
+- [ ] Add prohibited style rules: avoid specific colors, fonts, or layout
+      patterns
 - [ ] Add brand-safe copy style guardrails (tone, vocabulary, reading level)
 
 ### Design Token System
 
 - [ ] Add color token system: primitive -> semantic -> component token hierarchy
-- [ ] Add typography token system: font family, size scale, weight, line-height, tracking
+- [ ] Add typography token system: font family, size scale, weight, line-height,
+      tracking
 - [ ] Add spacing token system: 4-point grid scale with named aliases
 - [ ] Add border radius token system: none, sm, md, lg, xl, full
 - [ ] Add shadow token system: 0-5 elevation levels
 - [ ] Add motion/animation token system: duration, easing, delay presets
 - [ ] Add breakpoint token system: xs, sm, md, lg, xl, 2xl
-- [ ] Add semantic color token aliases: primary, secondary, accent, success, warning, error, neutral
+- [ ] Add semantic color token aliases: primary, secondary, accent, success,
+      warning, error, neutral
 - [ ] Add dark mode token variant generation for all semantic tokens
 - [ ] Add CSS custom property export for token sets
 - [ ] Add Figma tokens JSON export (compatible with Figma Tokens plugin)
@@ -815,13 +898,15 @@
 - [ ] Add centralized asset library with folder and collection structure
 - [ ] Add tag-based organization with multi-tag support and search
 - [ ] Add version history for every exported asset with diff viewer
-- [ ] Add duplicate detection for visually similar assets using perceptual hashing
+- [ ] Add duplicate detection for visually similar assets using perceptual
+      hashing
 - [ ] Add smart search by text, tag, style, date, and visual content similarity
 - [ ] Add bulk export and bulk rename tools for asset management
 
 ### Workflow and Governance
 
-- [ ] Add asset approval workflow with statuses: draft -> review -> approved -> archived
+- [ ] Add asset approval workflow with statuses: draft -> review -> approved ->
+      archived
 - [ ] Add reviewer assignment and approval notification system
 - [ ] Add usage tracking: which projects/campaigns use each asset
 - [ ] Add expired/outdated asset flagging with renewal reminders
@@ -893,13 +978,16 @@
 
 ### Curated Marketplace
 
-- [ ] Add curated template packs by industry: SaaS, ecommerce, fintech, health, education
-- [ ] Add curated template packs by design style: minimal, bold, dark, glassmorphism
+- [ ] Add curated template packs by industry: SaaS, ecommerce, fintech, health,
+      education
+- [ ] Add curated template packs by design style: minimal, bold, dark,
+      glassmorphism
 - [ ] Add featured template of the week with animated preview
 - [ ] Add community-submitted templates with moderation queue
 - [ ] Add inspired-by remix feature: fork a public template as starting point
 - [ ] Add prompt versioning with changelog notes
-- [ ] Add template categories: landing page, dashboard, mobile app, marketing, icon
+- [ ] Add template categories: landing page, dashboard, mobile app, marketing,
+      icon
 
 ---
 
@@ -930,7 +1018,8 @@
 
 ### Plan Structure
 
-- [ ] Add usage metering by generation type (web, mobile, icons, screenshots, marketing)
+- [ ] Add usage metering by generation type (web, mobile, icons, screenshots,
+      marketing)
 - [ ] Add Free / Pro / Agency / Enterprise plan matrix with feature gates
 - [ ] Add monthly and annual billing options with annual discount (20%)
 - [ ] Add credit packs for extra generation renders beyond plan quota
@@ -954,7 +1043,8 @@
 
 ### Smart Recommendations
 
-- [ ] Add trend-aware style recommendations based on market category and industry
+- [ ] Add trend-aware style recommendations based on market category and
+      industry
 - [ ] Add conversion-optimized layout suggestions backed by CRO data
 - [ ] Add audience persona-aware design generation (age, profession, context)
 - [ ] Add competitor style gap analysis mode to identify visual differentiation
@@ -965,11 +1055,15 @@
 
 ### AI Agent Capabilities
 
-- [ ] Add autonomous design iteration agent (generate -> critique -> refine -> deliver)
-- [ ] Add multi-agent design debate: two AI agents argue different design approaches
-- [ ] Add context-aware prompt memory that persists brand preferences session-to-session
+- [ ] Add autonomous design iteration agent (generate -> critique -> refine ->
+      deliver)
+- [ ] Add multi-agent design debate: two AI agents argue different design
+      approaches
+- [ ] Add context-aware prompt memory that persists brand preferences
+      session-to-session
 - [ ] Add AI design consultant mode: strategic advice before generation starts
-- [ ] Add competitive intelligence agent: analyze competitor visual identity patterns
+- [ ] Add competitive intelligence agent: analyze competitor visual identity
+      patterns
 - [ ] Add make-it-more-X natural language style refinement commands
 
 ---
@@ -978,7 +1072,8 @@
 
 ### Motion and Video
 
-- [ ] Add short motion graphics generation for social media teasers (3-6 seconds)
+- [ ] Add short motion graphics generation for social media teasers (3-6
+      seconds)
 - [ ] Add lightweight animated app preview videos (screen capture + annotation)
 - [ ] Add GIF preview generator for Product Hunt gallery animations
 - [ ] Add template-driven product demo video storyboard generation
@@ -998,12 +1093,15 @@
 
 ### Editor Localization
 
-- [ ] Add multilingual editor UI: English, Spanish, Portuguese, French, German, Japanese
-- [ ] Add locale-specific marketing copy tone presets (formal vs. informal register)
+- [ ] Add multilingual editor UI: English, Spanish, Portuguese, French, German,
+      Japanese
+- [ ] Add locale-specific marketing copy tone presets (formal vs. informal
+      register)
 - [ ] Add right-to-left (RTL) layout adaptation for Arabic, Hebrew, Persian
 - [ ] Add region-specific screenshot packs with auto-translated panel copy
 - [ ] Add localized date, number, and currency formatting in generated mock data
-- [ ] Add pseudo-localization mode for testing layout expansion with long strings
+- [ ] Add pseudo-localization mode for testing layout expansion with long
+      strings
 - [ ] Add language detection from browser locale for first-run UI
 
 ---
@@ -1019,7 +1117,8 @@
 - [ ] Add audit export API for compliance and legal teams
 - [ ] Add data residency options: US, EU, APAC region selection
 - [ ] Add managed data retention policies with automated archival
-- [ ] Add private model routing for enterprise: use own API keys with own provider
+- [ ] Add private model routing for enterprise: use own API keys with own
+      provider
 - [ ] Add custom domain support for enterprise workspace portals
 - [ ] Add enterprise SLA dashboard with uptime and response time tracking
 - [ ] Add dedicated support tier with named account manager
@@ -1032,10 +1131,13 @@
 
 - [ ] Add WCAG 2.1 AA compliance audit for the Sleek editor UI itself
 - [ ] Add WCAG 2.1 AA compliance pass for all generated page HTML
-- [ ] Add color contrast checker: minimum 4.5:1 for normal text, 3:1 for large text
-- [ ] Add keyboard navigation completeness audit (all actions reachable without mouse)
+- [ ] Add color contrast checker: minimum 4.5:1 for normal text, 3:1 for large
+      text
+- [ ] Add keyboard navigation completeness audit (all actions reachable without
+      mouse)
 - [ ] Add screen reader compatibility test with NVDA and VoiceOver
-- [ ] Add focus indicator visibility enforcement (visible focus ring for all interactive elements)
+- [ ] Add focus indicator visibility enforcement (visible focus ring for all
+      interactive elements)
 - [ ] Add skip-to-main-content link in all generated page outputs
 - [ ] Add ARIA landmark roles in all generated page structures
 - [ ] Add form label association check in generated forms
@@ -1051,7 +1153,8 @@
 
 ### Code Architecture
 
-- [ ] Split lib/prompt.ts (36KB) into domain-specific modules per generation mode
+- [ ] Split lib/prompt.ts (36KB) into domain-specific modules per generation
+      mode
 - [ ] Split components/chat/index.tsx (29KB) into focused sub-components
 - [ ] Add domain services layer to encapsulate business logic from API routes
 - [ ] Add queue worker layer for all async generation and export jobs
@@ -1103,7 +1206,8 @@
 - [ ] Add typography hierarchy validator: H1 > H2 > H3 > body > caption
 - [ ] Add color harmony validator: checks for consistent palette use
 - [ ] Add contrast checker for WCAG AA baseline (4.5:1 for text)
-- [ ] Add component alignment checker: edge alignment, center alignment, baseline
+- [ ] Add component alignment checker: edge alignment, center alignment,
+      baseline
 - [ ] Add consistency checker across multi-screen mobile flows
 
 ### Content Quality Validators
@@ -1121,20 +1225,20 @@
 
 ### Local Development
 
-- [ ] Add Biome or Prettier config for consistent code formatting
-- [ ] Add Husky pre-commit hooks: format, lint, type-check
-- [ ] Add commitlint for conventional commit message enforcement
-- [ ] Add .env.example auto-sync check to prevent secret leaks
-- [ ] Add npm run validate script that runs all checks in sequence
-- [ ] Add port conflict detection in dev server startup
+- [x] Add Biome or Prettier config for consistent code formatting
+- [x] Add Husky pre-commit hooks: format, lint, type-check
+- [x] Add commitlint for conventional commit message enforcement
+- [x] Add .env.example auto-sync check to prevent secret leaks
+- [x] Add npm run validate script that runs all checks in sequence
+- [x] Add port conflict detection in dev server startup
 
 ### Dependency Management
 
-- [ ] Audit and remove unused node_modules dependencies
-- [ ] Audit and pin critical dependency versions (Clerk, Vercel AI SDK, Next.js)
-- [ ] Add depcheck to CI for unused dependency detection
-- [ ] Add Renovate or Dependabot for automated dependency update PRs
-- [ ] Add breaking change detection on major dependency upgrades
+- [x] Audit and remove unused node_modules dependencies
+- [x] Audit and pin critical dependency versions (Clerk, Vercel AI SDK, Next.js)
+- [x] Add depcheck to CI for unused dependency detection
+- [x] Add Renovate or Dependabot for automated dependency update PRs
+- [x] Add breaking change detection on major dependency upgrades
 
 ---
 
@@ -1145,7 +1249,7 @@
 - [ ] Create public roadmap page with voting and feedback system
 - [ ] Create changelog page with feature tags and release dates
 - [ ] Create interactive demo mode with pre-loaded example projects
-- [ ] Create landing page with use-case gallery (web, mobile, marketing)
+- [x] Create landing page with use-case gallery (web, mobile, marketing)
 - [ ] Create API documentation public site
 
 ### Growth and Retention
@@ -1172,7 +1276,7 @@
 - [ ] Add staging environment for pre-production testing
 - [ ] Add environment-specific configuration validation
 - [ ] Add zero-downtime deployment strategy with health checks
-- [ ] Add rollback procedure documented in runbook
+- [x] Add rollback procedure documented in runbook
 
 ### Scaling
 
@@ -1197,17 +1301,20 @@
 
 > Highest-impact items to ship in the next 2-week sprint cycle.
 
-- [ ] Sprint 1: Implement strict TypeScript strict mode and resolve all violations
+- [ ] Sprint 1: Implement strict TypeScript strict mode and resolve all
+      violations
 - [ ] Sprint 1: Add E2E test: new user -> first generation -> canvas view
 - [ ] Sprint 1: Add generation abort button with safe stream cleanup
 - [ ] Sprint 1: Add Redis-backed rate limiting for generation endpoints
 - [ ] Sprint 1: Add structured logging with correlation IDs across all requests
 - [ ] Sprint 2: Add mobile app generation mode v1 (5 core screen templates)
-- [ ] Sprint 2: Add app store screenshot generator v1 (iOS 6.7in + Android phone)
+- [ ] Sprint 2: Add app store screenshot generator v1 (iOS 6.7in + Android
+      phone)
 - [ ] Sprint 2: Add app icon pack generator v1 (all iOS required sizes)
 - [ ] Sprint 2: Add export ZIP bundle with platform folder structure
 - [ ] Sprint 3: Add Product Hunt image set generator v1 (5-panel gallery)
-- [ ] Sprint 3: Add thumbnail generator v1 with YouTube + X presets + A/B variants
+- [ ] Sprint 3: Add thumbnail generator v1 with YouTube + X presets + A/B
+      variants
 - [ ] Sprint 3: Add dark mode variant generation as default companion output
 - [ ] Sprint 3: Add prompt version system with regression test coverage
 - [ ] Sprint 4: Add Stripe billing integration with free/pro tier enforcement
@@ -1221,10 +1328,12 @@
 
 > Exploratory and fun ideas — evaluate quarterly for inclusion in roadmap.
 
-- [ ] Gamified quality score badges for generated assets (Bronze, Silver, Gold, Platinum)
+- [ ] Gamified quality score badges for generated assets (Bronze, Silver, Gold,
+      Platinum)
 - [ ] Community prompt challenges and leaderboards with weekly winners
 - [ ] Public template marketplace with creator profiles and follow system
-- [ ] One-click recreate from trending design references (Dribbble/Behance inspiration)
+- [ ] One-click recreate from trending design references (Dribbble/Behance
+      inspiration)
 - [ ] AI naming assistant for projects, campaigns, and asset collections
 - [ ] Auto-generate launch checklist from selected distribution channels
 - [ ] Design blindspot weekly challenge: generate outside your comfort style
@@ -1248,21 +1357,22 @@
 
 > Measurable targets to track against each major epic.
 
-| Epic | KPI | Target |
-|------|-----|--------|
-| Generation Quality | p95 generation latency | < 10 seconds |
-| Generation Quality | Generation success rate | > 98% |
-| Mobile Engine | Supported screen templates | >= 20 |
-| Screenshot Engine | iOS/Android export size accuracy | 100% compliance |
-| Security | Zero high/critical CVEs in deps | Ongoing |
-| Testing | Unit test coverage | > 80% |
-| Performance | Lighthouse score (mobile) | >= 85 |
-| Performance | LCP | < 2.5 seconds |
-| Performance | CLS | < 0.1 |
-| Billing | Free to Pro conversion rate | > 8% |
-| Engagement | D7 retention | > 40% |
-| Engagement | Monthly active generation sessions | +20% MoM |
+| Epic               | KPI                                | Target          |
+| ------------------ | ---------------------------------- | --------------- |
+| Generation Quality | p95 generation latency             | < 10 seconds    |
+| Generation Quality | Generation success rate            | > 98%           |
+| Mobile Engine      | Supported screen templates         | >= 20           |
+| Screenshot Engine  | iOS/Android export size accuracy   | 100% compliance |
+| Security           | Zero high/critical CVEs in deps    | Ongoing         |
+| Testing            | Unit test coverage                 | > 80%           |
+| Performance        | Lighthouse score (mobile)          | >= 85           |
+| Performance        | LCP                                | < 2.5 seconds   |
+| Performance        | CLS                                | < 0.1           |
+| Billing            | Free to Pro conversion rate        | > 8%            |
+| Engagement         | D7 retention                       | > 40%           |
+| Engagement         | Monthly active generation sessions | +20% MoM        |
 
 ---
 
-*Last updated: 2026-07-14 | Maintained by the Sleek AI team | Review cycle: monthly*
+_Last updated: 2026-07-14 | Maintained by the Sleek AI team | Review cycle:
+monthly_

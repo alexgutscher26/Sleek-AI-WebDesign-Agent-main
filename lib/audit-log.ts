@@ -1,12 +1,8 @@
 import { headers } from "next/headers"
-import { createHash } from "node:crypto"
 import { createCompatDatabaseClient } from "@/lib/compat-backend"
+import { createHash } from "node:crypto"
 
-type AuditAction =
-  | "page.delete"
-  | "page.rename"
-  | "page.reorder"
-  | "page.duplicate"
+type AuditAction = "page.delete" | "page.rename" | "page.reorder" | "page.duplicate"
 
 type AuditEventInput = {
   userId: string
@@ -17,11 +13,7 @@ type AuditEventInput = {
   metadata?: Record<string, unknown>
 }
 
-const hashIp = (ip: string) => (
-  createHash("sha256")
-    .update(ip)
-    .digest("hex")
-)
+const hashIp = (ip: string) => createHash("sha256").update(ip).digest("hex")
 
 const getClientIpFromHeaders = (headerStore: Pick<Headers, "get">) => {
   const forwardedFor = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim()

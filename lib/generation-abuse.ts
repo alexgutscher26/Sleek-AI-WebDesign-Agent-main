@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { NextRequest } from "next/server";
+import { NextRequest } from "next/server"
+import { createHash } from "node:crypto"
 
 const IPV4_MAPPED_IPV6_PREFIX = "::ffff:"
 
@@ -65,9 +65,7 @@ export const hashClientIp = (ip: string | null) => {
     return null
   }
 
-  return createHash("sha256")
-    .update(ip)
-    .digest("hex")
+  return createHash("sha256").update(ip).digest("hex")
 }
 
 export const mapGenerationRateLimitError = (error: unknown) => {

@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server"
-import { getAuthServer } from "@/lib/insforge-server"
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response"
-import { assertTrustedAppRequest } from "@/lib/request-security"
 import { verifyBinaryFilePayload } from "@/lib/file-validation"
+import { getAuthServer } from "@/lib/insforge-server"
+import { assertTrustedAppRequest } from "@/lib/request-security"
 import { verifySignedUploadToken } from "@/lib/upload-signing"
 
 const bytesToDataUrl = (bytes: Uint8Array, mediaType: string) =>
@@ -14,7 +14,7 @@ export async function PUT(
 ) {
   try {
     const trustedRequest = assertTrustedAppRequest(request, {
-      requireNavigationHeaders: true
+      requireNavigationHeaders: true,
     })
     if (!trustedRequest.ok) {
       return createErrorResponse(403, trustedRequest.code, trustedRequest.message)
@@ -34,12 +34,20 @@ export async function PUT(
     }
 
     if (verification.payload.userId !== user.id) {
-      return createErrorResponse(403, "UPLOAD_TOKEN_USER_MISMATCH", "Upload token does not belong to this user.")
+      return createErrorResponse(
+        403,
+        "UPLOAD_TOKEN_USER_MISMATCH",
+        "Upload token does not belong to this user."
+      )
     }
 
     const contentType = request.headers.get("content-type")?.trim() ?? ""
     if (contentType !== verification.payload.mediaType) {
-      return createErrorResponse(400, "UPLOAD_CONTENT_TYPE_MISMATCH", "Upload content type does not match the signed token.")
+      return createErrorResponse(
+        400,
+        "UPLOAD_CONTENT_TYPE_MISMATCH",
+        "Upload content type does not match the signed token."
+      )
     }
 
     const bytes = new Uint8Array(await request.arrayBuffer())
@@ -59,7 +67,7 @@ export async function PUT(
         mediaType: verification.payload.mediaType,
         size: fileCheck.byteLength,
         url: bytesToDataUrl(bytes, verification.payload.mediaType),
-      }
+      },
     })
   } catch (error) {
     console.log(error)

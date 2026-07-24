@@ -1,5 +1,5 @@
-import OpenAI from "openai"
 import { getPlatformConfig, isOpenRouterBackend } from "@/lib/platform-config"
+import OpenAI from "openai"
 
 type CreateOptions = Record<string, unknown> & {
   model: string
@@ -12,20 +12,23 @@ const DEFAULT_MAX_TOKENS = 2048
 
 const globalState = globalThis as typeof globalThis & {
   __sleek_openai__?: OpenAI
+  __sleek_openai_key__?: string
 }
 
 function getClient() {
-  if (!globalState.__sleek_openai__) {
-    const config = getPlatformConfig()
+  const config = getPlatformConfig()
+  const key = `${config.openAiBaseUrl}:${config.openAiApiKey}`
+  if (!globalState.__sleek_openai__ || globalState.__sleek_openai_key__ !== key) {
+    globalState.__sleek_openai_key__ = key
     globalState.__sleek_openai__ = new OpenAI({
       apiKey: config.openAiApiKey,
       baseURL: config.openAiBaseUrl,
       defaultHeaders: isOpenRouterBackend()
         ? {
             "HTTP-Referer": "http://localhost:3000",
-            "X-Title": "Sleek AI Web Design Agent"
+            "X-Title": "Sleek AI Web Design Agent",
           }
-        : undefined
+        : undefined,
     })
   }
 
@@ -56,13 +59,13 @@ function normalizeMessages(messages: unknown[] = []) {
           return {
             type: "image_url",
             image_url: {
-              url: typedPart.image
-            }
+              url: typedPart.image,
+            },
           }
         }
 
         return part
-      })
+      }),
     }
   })
 }
@@ -74,15 +77,16 @@ export function createCompatAiClient() {
     chat: {
       completions: {
         create(options: CreateOptions) {
-          const { webSearch: _webSearch, maxTokens, messages, ...rest } = options
+          const { maxTokens, messages, ...rest } = options
+          delete (rest as { webSearch?: unknown }).webSearch
 
           return client.chat.completions.create({
             ...rest,
             max_tokens: typeof maxTokens === "number" ? maxTokens : DEFAULT_MAX_TOKENS,
-            messages: normalizeMessages(messages)
+            messages: normalizeMessages(messages),
           } as OpenAI.Chat.ChatCompletionCreateParams)
-        }
-      }
-    }
+        },
+      },
+    },
   }
 }

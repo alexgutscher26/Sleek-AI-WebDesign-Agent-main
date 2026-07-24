@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# .husky/pre-commit
+# Runs lint-staged on every commit:
+#   - Prettier formats staged files in-place
+#   - ESLint lints staged TS/TSX files
+#   - env-sync check guards against secret leaks
+npx lint-staged
+bun run scripts/env-sync-check.ts

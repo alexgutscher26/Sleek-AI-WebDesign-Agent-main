@@ -1,90 +1,94 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client"
+import { useEffect, useRef, useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { TOOL_MODE_ENUM, type ToolModeType } from "@/constants/canvas"
+import { type ContentDepth, DEFAULT_CONTENT_DEPTH } from "@/constants/content-depth"
+import { type CreativityLevel, DEFAULT_CREATIVITY_LEVEL } from "@/constants/creativity-level"
+import { DEFAULT_GENERATION_MODE, type GenerationMode } from "@/constants/generation-mode"
+import {
+  DEFAULT_GENERATION_PLATFORM,
+  type GenerationPlatform,
+} from "@/constants/generation-platform"
+import { DEFAULT_LAYOUT_COMPLEXITY, type LayoutComplexity } from "@/constants/layout-complexity"
+import { DEFAULT_MODEL_PROVIDER, type ModelProvider } from "@/constants/model-provider"
+import { DEFAULT_STYLE_INTENSITY, type StyleIntensity } from "@/constants/style-intensity"
+import { useCanvas } from "@/hooks/use-canvas"
+import { generateSlugId } from "@/lib/utils"
+import { PageType } from "@/types/project"
 import { useChat } from "@ai-sdk/react"
-import { generateSlugId } from "@/lib/utils";
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
-import { DefaultChatTransport, UIMessage } from "ai";
-import { toast } from "sonner";
-import { PromptInputMessage } from "../ai-elements/prompt-input";
-import NewProjectChat from "./new-project-chat";
-import { Button } from "../ui/button";
-import { ArrowLeft, LayoutPanelLeft, MonitorSmartphone } from "lucide-react";
-import ChatPanel from "./chat-panel";
-import { ChatHeader } from "./chat-header";
-import { CompactPaneToggle } from "./compact-pane-toggle";
-import Canvas from "./canvas";
-import { PageType } from "@/types/project";
-import { useQuery } from "@tanstack/react-query";
-import { useCanvas } from "@/hooks/use-canvas";
-import { ErrorState } from "../ui/view-state";
-import { SectionErrorBoundary } from "../ui/error-boundary";
-import { DEFAULT_CONTENT_DEPTH, type ContentDepth } from "@/constants/content-depth";
-import { DEFAULT_CREATIVITY_LEVEL, type CreativityLevel } from "@/constants/creativity-level";
-import { DEFAULT_GENERATION_PLATFORM, type GenerationPlatform } from "@/constants/generation-platform";
-import { DEFAULT_GENERATION_MODE, type GenerationMode } from "@/constants/generation-mode";
-import { DEFAULT_LAYOUT_COMPLEXITY, type LayoutComplexity } from "@/constants/layout-complexity";
-import { DEFAULT_MODEL_PROVIDER, type ModelProvider } from "@/constants/model-provider";
-import { DEFAULT_STYLE_INTENSITY, type StyleIntensity } from "@/constants/style-intensity";
-import { TOOL_MODE_ENUM, type ToolModeType } from "@/constants/canvas";
+import { useQuery } from "@tanstack/react-query"
+import { DefaultChatTransport, UIMessage } from "ai"
+import { toast } from "sonner"
+import { PromptInputMessage } from "../ai-elements/prompt-input"
+import type { SaveStatus } from "../ui/autosave-indicator"
+import { SectionErrorBoundary } from "../ui/error-boundary"
+import { ErrorState } from "../ui/view-state"
+import Canvas from "./canvas"
+import { ChatHeader } from "./chat-header"
+import ChatPanel from "./chat-panel"
+import { CompactPaneToggle } from "./compact-pane-toggle"
+import NewProjectChat from "./new-project-chat"
 
 type PropsType = {
-  isProjectPage?: boolean;
-  slugId?: string;
+  isProjectPage?: boolean
+  slugId?: string
 }
 
 type StreamDataPart = {
-  type: string;
-  data?: unknown;
+  type: string
+  data?: unknown
 }
 
 type StreamPage = {
-  id: string;
-  name: string;
-  rootStyles: string;
-  metadata?: PageType["metadata"];
+  id: string
+  name: string
+  rootStyles: string
+  metadata?: PageType["metadata"]
 }
 
 type StreamPageCreated = {
-  id: string;
-  name: string;
-  rootStyles: string;
-  htmlContent: string;
-  metadata?: PageType["metadata"];
-  error?: string;
-  isTemporary?: boolean;
+  id: string
+  name: string
+  rootStyles: string
+  htmlContent: string
+  metadata?: PageType["metadata"]
+  error?: string
+  isTemporary?: boolean
 }
 
 type GenerationStreamData = {
-  status?: "error" | "canceled" | string;
+  status?: "error" | "canceled" | string
 }
 
 export type CanvasPageLayout = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 type EditorSnapshot = {
-  input: string;
-  selectedPageId: string | null;
-  toolMode: ToolModeType;
-  pageLayouts: Record<string, CanvasPageLayout>;
+  input: string
+  selectedPageId: string | null
+  toolMode: ToolModeType
+  pageLayouts: Record<string, CanvasPageLayout>
 }
 
 export type EditorHistoryControls = {
-  canUndo: boolean;
-  canRedo: boolean;
-  undo: () => void;
-  redo: () => void;
+  canUndo: boolean
+  canRedo: boolean
+  undo: () => void
+  redo: () => void
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const PROMPT_HISTORY_MERGE_WINDOW_MS = 900
 const MAX_HISTORY_ENTRIES = 100
 
-const getDefaultPageLayout = (page: PageType | Pick<PageType, "metadata"> | undefined, index: number): CanvasPageLayout => {
+const getDefaultPageLayout = (
+  page: PageType | Pick<PageType, "metadata"> | undefined,
+  index: number
+): CanvasPageLayout => {
   const viewports = page?.metadata?.viewports ?? []
   const viewport = viewports.find((entry) => entry.id === "desktop") ?? viewports[0]
 
@@ -105,31 +109,25 @@ const getDefaultPageLayout = (page: PageType | Pick<PageType, "metadata"> | unde
   }
 }
 
-const normalizePageLayouts = (
-  pages: PageType[],
-  layouts: Record<string, CanvasPageLayout>
-) => pages.reduce<Record<string, CanvasPageLayout>>((acc, page, index) => {
-  const existingLayout = layouts[page.id]
-  const viewport = page.metadata?.viewports?.[0]
-  const shouldUpgradeLegacyDesktopLayout = Boolean(
-    viewport &&
-    existingLayout &&
-    existingLayout.width === 1550 &&
-    existingLayout.height === 900
-  )
+const normalizePageLayouts = (pages: PageType[], layouts: Record<string, CanvasPageLayout>) =>
+  pages.reduce<Record<string, CanvasPageLayout>>((acc, page, index) => {
+    const existingLayout = layouts[page.id]
+    const viewport = page.metadata?.viewports?.[0]
+    const shouldUpgradeLegacyDesktopLayout = Boolean(
+      viewport && existingLayout && existingLayout.width === 1550 && existingLayout.height === 900
+    )
 
-  acc[page.id] = shouldUpgradeLegacyDesktopLayout
-    ? getDefaultPageLayout(page, index)
-    : existingLayout ?? getDefaultPageLayout(page, index)
-  return acc
-}, {})
+    acc[page.id] = shouldUpgradeLegacyDesktopLayout
+      ? getDefaultPageLayout(page, index)
+      : (existingLayout ?? getDefaultPageLayout(page, index))
+    return acc
+  }, {})
 
-const snapshotsEqual = (a: EditorSnapshot, b: EditorSnapshot) => (
+const snapshotsEqual = (a: EditorSnapshot, b: EditorSnapshot) =>
   a.input === b.input &&
   a.selectedPageId === b.selectedPageId &&
   a.toolMode === b.toolMode &&
   JSON.stringify(a.pageLayouts) === JSON.stringify(b.pageLayouts)
-)
 
 const isEditableTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) {
@@ -163,16 +161,16 @@ const uploadFileWithSignedUrl = async (file: PromptInputMessage["files"][number]
   const initResponse = await fetch("/api/upload/init", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       filename: file.filename,
       mediaType: file.mediaType,
-      size: blob.size
-    })
+      size: blob.size,
+    }),
   })
 
-  const initPayload = await initResponse.json().catch(() => null) as {
+  const initPayload = (await initResponse.json().catch(() => null)) as {
     success?: boolean
     data?: { uploadUrl?: string }
     error?: { message?: string }
@@ -185,12 +183,12 @@ const uploadFileWithSignedUrl = async (file: PromptInputMessage["files"][number]
   const uploadResponse = await fetch(initPayload.data.uploadUrl, {
     method: "PUT",
     headers: {
-      "Content-Type": file.mediaType
+      "Content-Type": file.mediaType,
     },
-    body: blob
+    body: blob,
   })
 
-  const uploadPayload = await uploadResponse.json().catch(() => null) as {
+  const uploadPayload = (await uploadResponse.json().catch(() => null)) as {
     success?: boolean
     data?: {
       file?: {
@@ -208,89 +206,104 @@ const uploadFileWithSignedUrl = async (file: PromptInputMessage["files"][number]
   return {
     ...file,
     size: uploadPayload.data.file.size ?? blob.size,
-    url: uploadPayload.data.file.url
+    url: uploadPayload.data.file.url,
   }
 }
 
 const serializeFilesForTransport = async (files: PromptInputMessage["files"]) => {
-  return Promise.all(
-    files.map((file) => uploadFileWithSignedUrl(file))
-  )
+  return Promise.all(files.map((file) => uploadFileWithSignedUrl(file)))
 }
 
-const ChatInterface = ({
-  isProjectPage = false,
-  slugId: propSlugId
-}: PropsType) => {
-  const pathname = usePathname();
+const ChatInterface = ({ isProjectPage = false, slugId: propSlugId }: PropsType) => {
+  const pathname = usePathname()
   const router = useRouter()
 
-  const [slugId, setSlugId] = useState(() => propSlugId
-    || generateSlugId())
-
+  const [slugId, setSlugId] = useState(() => propSlugId || generateSlugId())
 
   const [input, setInput] = useState(() => {
     try {
-      const raw = localStorage.getItem("sleek_landing_seed");
-      if (raw) return (JSON.parse(raw) as { prompt?: string }).prompt ?? "";
+      const raw = localStorage.getItem("sleek_landing_seed")
+      if (raw) return (JSON.parse(raw) as { prompt?: string }).prompt ?? ""
     } catch {}
-    return "";
+    return ""
   })
   const [contentDepth, setContentDepth] = useState<ContentDepth>(() => {
     try {
-      const raw = localStorage.getItem("sleek_landing_seed");
-      if (raw) return (JSON.parse(raw) as { contentDepth?: ContentDepth }).contentDepth ?? DEFAULT_CONTENT_DEPTH;
+      const raw = localStorage.getItem("sleek_landing_seed")
+      if (raw)
+        return (
+          (JSON.parse(raw) as { contentDepth?: ContentDepth }).contentDepth ?? DEFAULT_CONTENT_DEPTH
+        )
     } catch {}
-    return DEFAULT_CONTENT_DEPTH;
+    return DEFAULT_CONTENT_DEPTH
   })
   const [creativityLevel, setCreativityLevel] = useState<CreativityLevel>(() => {
     try {
-      const raw = localStorage.getItem("sleek_landing_seed");
-      if (raw) return (JSON.parse(raw) as { creativityLevel?: CreativityLevel }).creativityLevel ?? DEFAULT_CREATIVITY_LEVEL;
+      const raw = localStorage.getItem("sleek_landing_seed")
+      if (raw)
+        return (
+          (JSON.parse(raw) as { creativityLevel?: CreativityLevel }).creativityLevel ??
+          DEFAULT_CREATIVITY_LEVEL
+        )
     } catch {}
-    return DEFAULT_CREATIVITY_LEVEL;
+    return DEFAULT_CREATIVITY_LEVEL
   })
   const [generationPlatform, setGenerationPlatform] = useState<GenerationPlatform>(() => {
     try {
-      const raw = localStorage.getItem("sleek_landing_seed");
-      if (raw) return (JSON.parse(raw) as { generationPlatform?: GenerationPlatform }).generationPlatform ?? DEFAULT_GENERATION_PLATFORM;
+      const raw = localStorage.getItem("sleek_landing_seed")
+      if (raw)
+        return (
+          (JSON.parse(raw) as { generationPlatform?: GenerationPlatform }).generationPlatform ??
+          DEFAULT_GENERATION_PLATFORM
+        )
     } catch {}
-    return DEFAULT_GENERATION_PLATFORM;
+    return DEFAULT_GENERATION_PLATFORM
   })
   const [generationMode, setGenerationMode] = useState<GenerationMode>(() => {
     try {
-      const raw = localStorage.getItem("sleek_landing_seed");
-      if (raw) return (JSON.parse(raw) as { generationMode?: GenerationMode }).generationMode ?? DEFAULT_GENERATION_MODE;
+      const raw = localStorage.getItem("sleek_landing_seed")
+      if (raw)
+        return (
+          (JSON.parse(raw) as { generationMode?: GenerationMode }).generationMode ??
+          DEFAULT_GENERATION_MODE
+        )
     } catch {}
-    return DEFAULT_GENERATION_MODE;
+    return DEFAULT_GENERATION_MODE
   })
-  const [layoutComplexity, setLayoutComplexity] = useState<LayoutComplexity>(DEFAULT_LAYOUT_COMPLEXITY)
+  const [layoutComplexity, setLayoutComplexity] =
+    useState<LayoutComplexity>(DEFAULT_LAYOUT_COMPLEXITY)
   const [modelProvider, setModelProvider] = useState<ModelProvider>(() => {
     try {
-      const raw = localStorage.getItem("sleek_landing_seed");
-      if (raw) return (JSON.parse(raw) as { modelProvider?: ModelProvider }).modelProvider ?? DEFAULT_MODEL_PROVIDER;
+      const raw = localStorage.getItem("sleek_landing_seed")
+      if (raw)
+        return (
+          (JSON.parse(raw) as { modelProvider?: ModelProvider }).modelProvider ??
+          DEFAULT_MODEL_PROVIDER
+        )
     } catch {}
-    return DEFAULT_MODEL_PROVIDER;
+    return DEFAULT_MODEL_PROVIDER
   })
   const [styleIntensity, setStyleIntensity] = useState<StyleIntensity>(() => {
     try {
-      const raw = localStorage.getItem("sleek_landing_seed");
+      const raw = localStorage.getItem("sleek_landing_seed")
       if (raw) {
-        const seed = JSON.parse(raw) as { styleIntensity?: StyleIntensity };
-        localStorage.removeItem("sleek_landing_seed"); // consume once
-        return seed.styleIntensity ?? DEFAULT_STYLE_INTENSITY;
+        const seed = JSON.parse(raw) as { styleIntensity?: StyleIntensity }
+        localStorage.removeItem("sleek_landing_seed") // consume once
+        return seed.styleIntensity ?? DEFAULT_STYLE_INTENSITY
       }
     } catch {}
-    return DEFAULT_STYLE_INTENSITY;
+    return DEFAULT_STYLE_INTENSITY
   })
-  const [hasStarted, setHasStarted] = useState(isProjectPage);
+  const [hasStarted, setHasStarted] = useState(isProjectPage)
   const [projectTitle, setProjectTitle] = useState<string | null>(null)
-  const [pages, setPages] = useState<PageType[]>([]);
+  const [pages, setPages] = useState<PageType[]>([])
   const [toolMode, setToolMode] = useState<ToolModeType>(TOOL_MODE_ENUM.SELECT)
   const [pageLayouts, setPageLayouts] = useState<Record<string, CanvasPageLayout>>({})
-  const [activeCompactPane, setActiveCompactPane] = useState<"chat" | "canvas">("chat");
+  const [activeCompactPane, setActiveCompactPane] = useState<"chat" | "canvas">("chat")
   const [pastSnapshots, setPastSnapshots] = useState<EditorSnapshot[]>([])
   const [futureSnapshots, setFutureSnapshots] = useState<EditorSnapshot[]>([])
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved")
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
   const {
     data: projectData,
@@ -302,32 +315,29 @@ const ChatInterface = ({
     queryKey: ["project", slugId],
     queryFn: async () => {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
-        const res = await fetch(`/api/project/${slugId}`);
+        const res = await fetch(`/api/project/${slugId}`)
         if (res.ok) {
-          const payload = await res.json() as {
-            success: true;
+          const payload = (await res.json()) as {
+            success: true
             data: { title: string; messages: UIMessage[]; pages: PageType[] }
           }
           return payload.data
         }
 
-        const payload = await res.json().catch(() => null) as {
+        const payload = (await res.json().catch(() => null)) as {
           error?: { code?: string; message?: string }
-        } | null;
+        } | null
 
-        const isRetriableNotFound = payload?.error?.code === "PROJECT_NOT_FOUND" && attempt < 3;
-        if (isRetriableNotFound) {
-          await sleep(250 * attempt);
-          continue
+        if (payload?.error?.code === "PROJECT_NOT_FOUND") {
+          return { title: "New Project", messages: [], pages: [] }
         }
 
-        const message = payload?.error?.code === "PROJECT_NOT_FOUND"
-          ? "This project could not be found."
-          : payload?.error?.code === "UNAUTHORIZED"
+        const message =
+          payload?.error?.code === "UNAUTHORIZED"
             ? "Please sign in to access this project."
-            : payload?.error?.message || "Failed to fetch project.";
+            : payload?.error?.message || "Failed to fetch project."
 
-        throw new Error(message);
+        throw new Error(message)
       }
 
       throw new Error("Failed to fetch project.")
@@ -339,9 +349,7 @@ const ChatInterface = ({
     staleTime: 1000 * 60 * 5, // 5 minutes cache
   })
 
-  const { messages, sendMessage, setMessages, status, error,
-    stop
-  } = useChat({
+  const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     messages: [],
     transport: new DefaultChatTransport({
       api: "/api/project",
@@ -349,13 +357,13 @@ const ChatInterface = ({
         return {
           body: {
             ...body,
-            messages
-          }
+            messages,
+          },
         }
-      }
+      },
     }),
     onData(dataPart) {
-      const part = dataPart as StreamDataPart;
+      const part = dataPart as StreamDataPart
       const data = part.data
 
       switch (part.type) {
@@ -365,21 +373,22 @@ const ChatInterface = ({
           break
         }
         case "data-pages-skeleton": {
-          const pagesData = ((data as { pages?: StreamPage[] } | undefined)?.pages || [])
+          setSaveStatus("saving")
+          const pagesData = (data as { pages?: StreamPage[] } | undefined)?.pages || []
           const newPages = pagesData.map((page) => ({
             id: page.id,
             name: page.name,
             rootStyles: page.rootStyles,
             htmlContent: "",
             isLoading: true,
-            isTemporary: true
+            isTemporary: true,
           }))
           setPages((prev) => {
-            const existingIds = new Set(prev.map(p => p.id));
-            const toAdd = newPages.filter((page) => !existingIds.has(page.id));
+            const existingIds = new Set(prev.map((p) => p.id))
+            const toAdd = newPages.filter((page) => !existingIds.has(page.id))
             return [...prev, ...toAdd]
           })
-          break;
+          break
         }
 
         case "data-page-created": {
@@ -387,50 +396,52 @@ const ChatInterface = ({
           const page = payload.page
           const tempId = payload.tempId
           const persisted = payload.persisted === true
+          if (persisted) {
+            setSaveStatus("saved")
+            setLastSaved(new Date())
+          }
           setPages((prev) => {
-            const idx = prev.findIndex(p => p.id === tempId ||
-              p.id === page.id
-            )
-              const newPage: PageType = {
-                id: page.id,
-                name: page.name,
-                rootStyles: page.rootStyles,
-                htmlContent: page.htmlContent,
-                isLoading: false,
-                isTemporary: !persisted,
-                ...(page.metadata ? { metadata: page.metadata } : {}),
-                ...(page.error ? { error: page.error } : {})
-              };
+            const idx = prev.findIndex((p) => p.id === tempId || p.id === page.id)
+            const newPage: PageType = {
+              id: page.id,
+              name: page.name,
+              rootStyles: page.rootStyles,
+              htmlContent: page.htmlContent,
+              isLoading: false,
+              isTemporary: !persisted,
+              ...(page.metadata ? { metadata: page.metadata } : {}),
+              ...(page.error ? { error: page.error } : {}),
+            }
 
-              if (idx !== -1) {
-                const updated = [...prev];
-                updated[idx] = newPage;
-                return updated;
-              }
-              return [...prev, newPage]
+            if (idx !== -1) {
+              const updated = [...prev]
+              updated[idx] = newPage
+              return updated
+            }
+            return [...prev, newPage]
           })
-          break;
+          break
         }
 
         case "data-page-loading": {
-          const pageId = (data as { pageId?: string } | undefined)?.pageId;
+          const pageId = (data as { pageId?: string } | undefined)?.pageId
           if (!pageId) {
-            break;
+            break
           }
-          setPages(prev => {
-            const idx = prev.findIndex(p => p.id === pageId);
-            const targetPage = prev[idx];
+          setPages((prev) => {
+            const idx = prev.findIndex((p) => p.id === pageId)
+            const targetPage = prev[idx]
             if (idx !== -1 && targetPage) {
-              const updated = [...prev];
+              const updated = [...prev]
               updated[idx] = {
                 ...targetPage,
-                isLoading: true
-              };
-              return updated;
+                isLoading: true,
+              }
+              return updated
             }
             return prev
-          });
-          break;
+          })
+          break
         }
         case "data-heartbeat": {
           lastStreamEventTimeRef.current = Date.now()
@@ -438,11 +449,13 @@ const ChatInterface = ({
         }
         case "data-stream-warning": {
           const payload = data as { message?: string } | undefined
-          toast.warning(payload?.message || "Generation is taking longer than expected. Please stand by...")
+          toast.warning(
+            payload?.message || "Generation is taking longer than expected. Please stand by..."
+          )
           break
         }
         case "data-generation": {
-          const generationData = data as GenerationStreamData | undefined;
+          const generationData = data as GenerationStreamData | undefined
           if (generationData?.status === "error") {
             setPages((prev) =>
               prev.flatMap((page) => {
@@ -454,10 +467,12 @@ const ChatInterface = ({
                   return [page]
                 }
 
-                return [{
-                  ...page,
-                  isLoading: false,
-                }]
+                return [
+                  {
+                    ...page,
+                    isLoading: false,
+                  },
+                ]
               })
             )
           }
@@ -473,15 +488,17 @@ const ChatInterface = ({
                   return [page]
                 }
 
-                return [{
-                  ...page,
-                  isLoading: false
-                }]
+                return [
+                  {
+                    ...page,
+                    isLoading: false,
+                  },
+                ]
               })
             )
           }
 
-          break;
+          break
         }
       }
     },
@@ -497,23 +514,25 @@ const ChatInterface = ({
             return [page]
           }
 
-          return [{
-            ...page,
-            isLoading: false,
-          }]
+          return [
+            {
+              ...page,
+              isLoading: false,
+            },
+          ]
         })
       )
       toast.error(error.message || "Failed to generate response")
-    }
+    },
   })
 
-  const lastStreamEventTimeRef = useRef<number>(0);
+  const lastStreamEventTimeRef = useRef<number>(0)
   const lastSubmissionRef = useRef<{
     message: Parameters<typeof sendMessage>[0]
     options: Record<string, unknown>
     idempotencyKey: string
   } | null>(null)
-  const lastSyncedSlug = useRef<string | null>(null);
+  const lastSyncedSlug = useRef<string | null>(null)
   const { selectedPageId, setSelectedPageId } = useCanvas()
   const historyMetaRef = useRef<{ lastKind: string | null; lastAt: number }>({
     lastKind: null,
@@ -522,7 +541,10 @@ const ChatInterface = ({
 
   useEffect(() => {
     const handleOnline = () => {
-      if ((status === "streaming" || status === "submitted" || status === "error") && lastSubmissionRef.current) {
+      if (
+        (status === "streaming" || status === "submitted" || status === "error") &&
+        lastSubmissionRef.current
+      ) {
         toast.info("Network restored. Automatically reconnecting stream...")
         const lastSub = lastSubmissionRef.current
         lastStreamEventTimeRef.current = Date.now()
@@ -537,37 +559,58 @@ const ChatInterface = ({
             layoutComplexity,
             modelProvider,
             styleIntensity,
-            slugId
-          }
+            slugId,
+          },
         })
       }
     }
 
     window.addEventListener("online", handleOnline)
     return () => window.removeEventListener("online", handleOnline)
-  }, [status, contentDepth, creativityLevel, generationPlatform, generationMode, layoutComplexity, modelProvider, styleIntensity, slugId, sendMessage])
+  }, [
+    status,
+    contentDepth,
+    creativityLevel,
+    generationPlatform,
+    generationMode,
+    layoutComplexity,
+    modelProvider,
+    styleIntensity,
+    slugId,
+    sendMessage,
+  ])
 
   useEffect(() => {
-      if (projectData && slugId !== lastSyncedSlug.current) {
-          queueMicrotask(() => {
-            if (projectData.messages) setMessages(projectData.messages);
-            if (projectData.pages) {
-              setPages(projectData.pages);
-              setPageLayouts(normalizePageLayouts(projectData.pages, {}))
-            }
-          })
-          lastSyncedSlug.current = slugId;
-          setPastSnapshots([])
-          setFutureSnapshots([])
-          historyMetaRef.current = { lastKind: null, lastAt: 0 }
-      }
-  }, [projectData, slugId, setMessages]);
+    if (status === "submitted" || status === "streaming") {
+      setSaveStatus("saving")
+    } else if (status === "ready") {
+      setSaveStatus("saved")
+      setLastSaved((prev) => prev ?? new Date())
+    }
+  }, [status])
 
+  useEffect(() => {
+    if (projectData && slugId !== lastSyncedSlug.current) {
+      queueMicrotask(() => {
+        if (projectData.messages) setMessages(projectData.messages)
+        if (projectData.pages) {
+          setPages(projectData.pages)
+          setPageLayouts(normalizePageLayouts(projectData.pages, {}))
+        }
+        setSaveStatus("saved")
+        setLastSaved(new Date())
+      })
+      lastSyncedSlug.current = slugId
+      setPastSnapshots([])
+      setFutureSnapshots([])
+      historyMetaRef.current = { lastKind: null, lastAt: 0 }
+    }
+  }, [projectData, slugId, setMessages])
 
   useEffect(() => {
     const checkReset = () => {
       if (window.location.pathname === "/" && (hasStarted || isProjectPage)) {
-        setSlugId(generateSlugId());
+        setSlugId(generateSlugId())
         setMessages([])
         setPages([])
         setHasStarted(false)
@@ -589,9 +632,7 @@ const ChatInterface = ({
       checkReset()
     }
 
-    return () => window.removeEventListener("popstate",
-      checkReset
-    )
+    return () => window.removeEventListener("popstate", checkReset)
   }, [pathname, hasStarted, isProjectPage, setMessages, setSelectedPageId])
 
   const currentSnapshotRef = useRef<EditorSnapshot>({
@@ -623,9 +664,7 @@ const ChatInterface = ({
     void setSelectedPageId(null)
   }, [isProjectPage, propSlugId, setMessages, setSelectedPageId, slugId])
 
-  const captureSnapshot = (
-    overrides: Partial<EditorSnapshot> = {}
-  ): EditorSnapshot => ({
+  const captureSnapshot = (overrides: Partial<EditorSnapshot> = {}): EditorSnapshot => ({
     input,
     selectedPageId,
     toolMode,
@@ -635,6 +674,7 @@ const ChatInterface = ({
 
   useEffect(() => {
     currentSnapshotRef.current = captureSnapshot()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, pageLayouts, pages, selectedPageId, toolMode])
 
   useEffect(() => {
@@ -648,20 +688,17 @@ const ChatInterface = ({
     setPageLayouts(snapshot.pageLayouts)
   }
 
-  const commitSnapshot = (
-    nextSnapshot: EditorSnapshot,
-    kind: string,
-    mergeWindowMs = 0
-  ) => {
+  const commitSnapshot = (nextSnapshot: EditorSnapshot, kind: string, mergeWindowMs = 0) => {
     const currentSnapshot = currentSnapshotRef.current
     if (snapshotsEqual(currentSnapshot, nextSnapshot)) {
       return
     }
 
     const now = Date.now()
-    const shouldMerge = mergeWindowMs > 0
-      && historyMetaRef.current.lastKind === kind
-      && now - historyMetaRef.current.lastAt < mergeWindowMs
+    const shouldMerge =
+      mergeWindowMs > 0 &&
+      historyMetaRef.current.lastKind === kind &&
+      now - historyMetaRef.current.lastAt < mergeWindowMs
 
     if (!shouldMerge) {
       setPastSnapshots((prev) => [...prev, currentSnapshot].slice(-MAX_HISTORY_ENTRIES))
@@ -710,11 +747,7 @@ const ChatInterface = ({
   }
 
   const handleInputChange = (nextInput: string) => {
-    commitSnapshot(
-      captureSnapshot({ input: nextInput }),
-      "prompt",
-      PROMPT_HISTORY_MERGE_WINDOW_MS
-    )
+    commitSnapshot(captureSnapshot({ input: nextInput }), "prompt", PROMPT_HISTORY_MERGE_WINDOW_MS)
   }
 
   const updateSelectedPage = (nextPageId: string | null, historyKind = "page-selection") => {
@@ -731,40 +764,36 @@ const ChatInterface = ({
       [pageId]: nextLayout,
     }
 
-    commitSnapshot(
-      captureSnapshot({ pageLayouts: nextPageLayouts }),
-      `canvas-layout:${pageId}`
-    )
+    commitSnapshot(captureSnapshot({ pageLayouts: nextPageLayouts }), `canvas-layout:${pageId}`)
+    setSaveStatus("saved")
+    setLastSaved(new Date())
   }
 
-  const onSubmit = async (
-    message: PromptInputMessage,
-    options: Record<string, unknown> = {}
-  ) => {
-
+  const onSubmit = async (message: PromptInputMessage, options: Record<string, unknown> = {}) => {
     if (!message.text.trim()) {
       toast.error("Please enter a message")
       return
     }
 
     if (!isProjectPage && !hasStarted) {
-      window.history.pushState(null, "", `/project/${slugId}`);
+      window.history.pushState(null, "", `/project/${slugId}`)
       setHasStarted(true)
     }
 
     const serializedFiles = await serializeFilesForTransport(message.files)
-    const idempotencyKey = (options.idempotencyKey as string | undefined) ?? crypto.randomUUID().replace(/-/g, "_")
+    const idempotencyKey =
+      (options.idempotencyKey as string | undefined) ?? crypto.randomUUID().replace(/-/g, "_")
 
     lastSubmissionRef.current = {
       message: { text: message.text, files: serializedFiles },
       options,
-      idempotencyKey
+      idempotencyKey,
     }
 
     sendMessage(
       {
         text: message.text,
-        files: serializedFiles
+        files: serializedFiles,
       },
       {
         body: {
@@ -777,8 +806,8 @@ const ChatInterface = ({
           layoutComplexity,
           modelProvider,
           styleIntensity,
-          slugId
-        }
+          slugId,
+        },
       }
     )
 
@@ -787,9 +816,9 @@ const ChatInterface = ({
 
   const handleBack = () => {
     if (!isProjectPage) {
-      setSlugId(generateSlugId());
-      setHasStarted(false);
-      setMessages([]);
+      setSlugId(generateSlugId())
+      setHasStarted(false)
+      setMessages([])
       setPages([])
       setInput("")
       setProjectTitle(null)
@@ -801,10 +830,10 @@ const ChatInterface = ({
       lastSyncedSlug.current = null
       void setSelectedPageId(null)
     }
-    router.push("/");
+    router.push("/")
   }
 
-  const selectedPage = pages.find((p) => p.id === selectedPageId);
+  const selectedPage = pages.find((p) => p.id === selectedPageId)
   const pageCount = pages.length
 
   useEffect(() => {
@@ -827,14 +856,19 @@ const ChatInterface = ({
           return
         }
 
-        if ((event.key === "[" || event.key === "]") && pages.length > 0 && !isEditableTarget(event.target)) {
+        if (
+          (event.key === "[" || event.key === "]") &&
+          pages.length > 0 &&
+          !isEditableTarget(event.target)
+        ) {
           event.preventDefault()
 
           const currentIndex = pages.findIndex((page) => page.id === selectedPageId)
           const fallbackIndex = event.key === "]" ? 0 : pages.length - 1
-          const nextIndex = currentIndex === -1
-            ? fallbackIndex
-            : (currentIndex + (event.key === "]" ? 1 : -1) + pages.length) % pages.length
+          const nextIndex =
+            currentIndex === -1
+              ? fallbackIndex
+              : (currentIndex + (event.key === "]" ? 1 : -1) + pages.length) % pages.length
 
           updateSelectedPage(pages[nextIndex]?.id ?? null, "page-navigation")
           return
@@ -879,6 +913,7 @@ const ChatInterface = ({
 
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, pages, selectedPageId, stop])
 
   if (!isProjectPage && !hasStarted) {
@@ -926,7 +961,6 @@ const ChatInterface = ({
     )
   }
 
-
   return (
     <div className="flex h-[100dvh] w-full flex-col overflow-hidden lg:flex-row">
       <CompactPaneToggle
@@ -936,70 +970,73 @@ const ChatInterface = ({
       />
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] md:grid-rows-[minmax(320px,42svh)_minmax(0,1fr)] lg:flex lg:min-w-0">
-      <div
-        className={`relative min-h-0 border-border bg-background
-        md:border-b lg:flex lg:h-full lg:w-full lg:max-w-md lg:border-b-0 lg:border-r
-        ${activeCompactPane === "canvas" ? "hidden md:flex" : "flex"}`}
-      >
-        <ChatHeader
-          title={projectTitle || projectData?.title || "Untitled Project"}
-          onBack={handleBack}
-        />
-
-        <SectionErrorBoundary sectionName="Chat Panel">
-          <ChatPanel
-            className="h-full pt-12 md:pt-13"
-            messages={messages}
-            input={input}
-            setInput={handleInputChange}
-            contentDepth={contentDepth}
-            creativityLevel={creativityLevel}
-            generationPlatform={generationPlatform}
-            generationMode={generationMode}
-            layoutComplexity={layoutComplexity}
-            modelProvider={modelProvider}
-            styleIntensity={styleIntensity}
-            setContentDepth={setContentDepth}
-            setCreativityLevel={setCreativityLevel}
-            setGenerationPlatform={setGenerationPlatform}
-            setGenerationMode={setGenerationMode}
-            setLayoutComplexity={setLayoutComplexity}
-            setModelProvider={setModelProvider}
-            setStyleIntensity={setStyleIntensity}
-            isLoading={isLoading}
-            isProjectLoading={isProjectLoading}
-            selectedPage={selectedPage}
-            status={status}
-            error={error}
-            onClearSelectedPage={() => updateSelectedPage(null, "page-selection-clear")}
-            onStop={stop}
-            onSubmit={onSubmit}
+        <div
+          className={`border-border bg-background relative min-h-0 md:border-b lg:flex lg:h-full lg:w-full lg:max-w-md lg:border-r lg:border-b-0 ${activeCompactPane === "canvas" ? "hidden md:flex" : "flex"}`}
+        >
+          <ChatHeader
+            title={projectTitle || projectData?.title || "Untitled Project"}
+            onBack={handleBack}
+            saveStatus={saveStatus}
+            lastSaved={lastSaved}
           />
-        </SectionErrorBoundary>
-      </div>
 
-      <div
-        className={`min-h-0 min-w-0 bg-background lg:flex-1
-        ${activeCompactPane === "chat" ? "hidden md:block" : "block"}`}
-      >
-        <SectionErrorBoundary sectionName="Canvas Workspace">
-          <Canvas
-            pages={pages}
-            setPages={setPages}
-            slugId={slugId}
-            isProjectLoading={isProjectLoading}
-            pageLayouts={pageLayouts}
-            selectedPageId={selectedPageId}
-            setSelectedPageId={(pageId) => updateSelectedPage(pageId)}
-            toolMode={toolMode}
-            setToolMode={updateToolMode}
-            onPageLayoutCommit={handlePageLayoutCommit}
-            history={historyControls}
-            onPagesChange={setPages}
-            onSelectPage={(pageId) => updateSelectedPage(pageId)}
-          />
-        </SectionErrorBoundary>
-      </div>
+          <SectionErrorBoundary sectionName="Chat Panel">
+            <ChatPanel
+              className="h-full pt-12 md:pt-13"
+              messages={messages}
+              input={input}
+              setInput={handleInputChange}
+              contentDepth={contentDepth}
+              creativityLevel={creativityLevel}
+              generationPlatform={generationPlatform}
+              generationMode={generationMode}
+              layoutComplexity={layoutComplexity}
+              modelProvider={modelProvider}
+              styleIntensity={styleIntensity}
+              setContentDepth={setContentDepth}
+              setCreativityLevel={setCreativityLevel}
+              setGenerationPlatform={setGenerationPlatform}
+              setGenerationMode={setGenerationMode}
+              setLayoutComplexity={setLayoutComplexity}
+              setModelProvider={setModelProvider}
+              setStyleIntensity={setStyleIntensity}
+              isLoading={isLoading}
+              isProjectLoading={isProjectLoading}
+              selectedPage={selectedPage}
+              status={status}
+              error={error}
+              onClearSelectedPage={() => updateSelectedPage(null, "page-selection-clear")}
+              onStop={stop}
+              onSubmit={onSubmit}
+            />
+          </SectionErrorBoundary>
+        </div>
+
+        <div
+          className={`bg-background min-h-0 min-w-0 lg:flex-1 ${activeCompactPane === "chat" ? "hidden md:block" : "block"}`}
+        >
+          <SectionErrorBoundary sectionName="Canvas Workspace">
+            <Canvas
+              pages={pages}
+              setPages={setPages}
+              slugId={slugId}
+              isProjectLoading={isProjectLoading}
+              pageLayouts={pageLayouts}
+              selectedPageId={selectedPageId}
+              setSelectedPageId={(pageId) => updateSelectedPage(pageId)}
+              toolMode={toolMode}
+              setToolMode={updateToolMode}
+              onPageLayoutCommit={handlePageLayoutCommit}
+              history={historyControls}
+              onPagesChange={setPages}
+              onSelectPage={(pageId) => updateSelectedPage(pageId)}
+              onSaveStatusChange={(st, dt) => {
+                setSaveStatus(st)
+                if (dt) setLastSaved(dt)
+              }}
+            />
+          </SectionErrorBoundary>
+        </div>
       </div>
     </div>
   )

@@ -1,21 +1,21 @@
-import React from 'react'
-import { TOOL_MODE_ENUM, ToolModeType } from '@/constants/canvas';
-import { Button } from '@/components/ui/button';
-import { HandIcon, MinusIcon, MousePointer, PlusIcon, Redo2Icon, Undo2Icon } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
+import React from "react"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { TOOL_MODE_ENUM, ToolModeType } from "@/constants/canvas"
+import { cn } from "@/lib/utils"
+import { HandIcon, MinusIcon, MousePointer, PlusIcon, Redo2Icon, Undo2Icon } from "lucide-react"
 
 type PropsType = {
-  zoomIn: () => void;
-  zoomOut: () => void;
-  zoomPercent: number;
-  toolMode: ToolModeType;
-  setToolMode: (toolMode: ToolModeType) => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
-};
+  zoomIn: () => void
+  zoomOut: () => void
+  zoomPercent: number
+  toolMode: ToolModeType
+  setToolMode: (toolMode: ToolModeType) => void
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
+}
 const CanvasControls = ({
   zoomIn,
   zoomOut,
@@ -27,20 +27,13 @@ const CanvasControls = ({
   onUndo,
   onRedo,
 }: PropsType) => {
-
   return (
-    <div
-      className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2
-      items-center gap-1.5 rounded-full border bg-card/95 px-3 py-1.5
-      text-foreground shadow-md backdrop-blur sm:bottom-6 sm:gap-2 sm:px-4
-      "
-    >
-
-      <div className='flex items-center gap-1'>
+    <div className="bg-card/95 text-foreground absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3 py-1.5 shadow-md backdrop-blur sm:bottom-6 sm:gap-2 sm:px-4">
+      <div className="flex items-center gap-1">
         <Button
           size="icon-sm"
           variant="ghost"
-          className="rounded-full cursor-pointer text-inherit! hover:bg-secondary"
+          className="hover:bg-secondary cursor-pointer rounded-full text-inherit!"
           onClick={onUndo}
           disabled={!canUndo}
           aria-label="Undo"
@@ -50,7 +43,7 @@ const CanvasControls = ({
         <Button
           size="icon-sm"
           variant="ghost"
-          className="rounded-full cursor-pointer text-inherit! hover:bg-secondary"
+          className="hover:bg-secondary cursor-pointer rounded-full text-inherit!"
           onClick={onRedo}
           disabled={!canRedo}
           aria-label="Redo"
@@ -59,18 +52,15 @@ const CanvasControls = ({
         </Button>
       </div>
 
-      <Separator orientation="vertical" className="h-5 hidden sm:block!" />
+      <Separator orientation="vertical" className="hidden h-5 sm:block!" />
 
-      <div className='flex items-center gap-1'>
+      <div className="flex items-center gap-1">
         <Button
           size="icon-sm"
           variant="ghost"
           className={cn(
-            `rounded-full cursor-pointer text-inherit!
-             hover:bg-secondary
-            `,
+            `hover:bg-secondary cursor-pointer rounded-full text-inherit!`,
             toolMode === TOOL_MODE_ENUM.SELECT && "bg-secondary"
-
           )}
           onClick={() => setToolMode(TOOL_MODE_ENUM.SELECT)}
         >
@@ -80,11 +70,8 @@ const CanvasControls = ({
           size="icon-sm"
           variant="ghost"
           className={cn(
-            `rounded-full cursor-pointer text-inherit!
-             hover:bg-secondary
-            `,
+            `hover:bg-secondary cursor-pointer rounded-full text-inherit!`,
             toolMode === TOOL_MODE_ENUM.HAND && "bg-secondary"
-
           )}
           onClick={() => setToolMode(TOOL_MODE_ENUM.HAND)}
         >
@@ -92,16 +79,12 @@ const CanvasControls = ({
         </Button>
       </div>
 
-      <Separator orientation="vertical" className="h-5 hidden sm:block!" />
+      <Separator orientation="vertical" className="hidden h-5 sm:block!" />
       <div className="flex items-center gap-1">
         <Button
           size="icon-sm"
           variant="ghost"
-          className={cn(
-            `rounded-full cursor-pointer text-inherit!
-             hover:bg-secondary
-            `,
-          )}
+          className={cn(`hover:bg-secondary cursor-pointer rounded-full text-inherit!`)}
           onClick={() => zoomOut()}
         >
           <MinusIcon />
@@ -110,17 +93,12 @@ const CanvasControls = ({
         <Button
           size="icon-sm"
           variant="ghost"
-          className={cn(
-            `rounded-full cursor-pointer text-inherit!
-             hover:bg-secondary
-            `,
-          )}
+          className={cn(`hover:bg-secondary cursor-pointer rounded-full text-inherit!`)}
           onClick={() => zoomIn()}
         >
           <PlusIcon />
         </Button>
       </div>
-
     </div>
   )
 }

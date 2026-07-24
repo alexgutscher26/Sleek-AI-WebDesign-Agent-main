@@ -3,9 +3,7 @@ import path from "path"
 import postgres from "postgres"
 
 function parseSqlStatements(rawSql: string): string[] {
-  const cleanSql = rawSql
-    .replace(/--.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
+  const cleanSql = rawSql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")
 
   const statements: string[] = []
   let current = ""
@@ -89,7 +87,9 @@ async function main() {
         await sql.unsafe(currentStmt)
       }
     }
-    console.log(`✅ Database schema successfully pushed (${statements.length} statements executed)!`)
+    console.log(
+      `✅ Database schema successfully pushed (${statements.length} statements executed)!`
+    )
   } catch (error) {
     console.error(`❌ Error executing statement #${currentIdx + 1}:`)
     console.error(currentStmt.slice(0, 300) + (currentStmt.length > 300 ? "..." : ""))

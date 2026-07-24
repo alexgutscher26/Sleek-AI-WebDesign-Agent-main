@@ -6,8 +6,8 @@ export async function GET() {
       success: false,
       error: {
         code: "AUTH_ROUTE_REMOVED",
-        message: "Auth is handled by Clerk routes. Use /sign-in or /sign-up."
-      }
+        message: "Auth is handled by Clerk routes. Use /sign-in or /sign-up.",
+      },
     },
     { status: 410 }
   )

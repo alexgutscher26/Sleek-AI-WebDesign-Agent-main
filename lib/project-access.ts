@@ -14,7 +14,7 @@ export async function getOwnedProjectBySlug<TData extends Record<string, unknown
     .eq("slugId", slugId)
     .eq("userId", userId)
     .single() as unknown as Promise<{
-      data: TData | null
-      error?: { code?: string; message?: string } | null
-    }>
+    data: TData | null
+    error?: { code?: string; message?: string } | null
+  }>
 }

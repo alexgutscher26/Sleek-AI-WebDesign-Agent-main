@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server"
-import { getAuthServer } from "@/lib/insforge-server"
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-response"
 import { parseJsonBody } from "@/lib/api-validation"
-import { assertTrustedAppRequest } from "@/lib/request-security"
+import { getAuthServer } from "@/lib/insforge-server"
 import { ALLOWED_FILE_MIME_TYPES, MAX_FILE_SIZE_BYTES, MIME_EXTENSIONS } from "@/lib/request-limits"
+import { assertTrustedAppRequest } from "@/lib/request-security"
 import { createUploadUrl, issueSignedUploadToken } from "@/lib/upload-signing"
 
 const ALLOWED_FILE_TYPES = new Set(ALLOWED_FILE_MIME_TYPES)
@@ -11,7 +11,7 @@ const ALLOWED_FILE_TYPES = new Set(ALLOWED_FILE_MIME_TYPES)
 export async function POST(request: NextRequest) {
   try {
     const trustedRequest = assertTrustedAppRequest(request, {
-      requireNavigationHeaders: true
+      requireNavigationHeaders: true,
     })
     if (!trustedRequest.ok) {
       return createErrorResponse(403, trustedRequest.code, trustedRequest.message)
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       return createErrorResponse(401, "UNAUTHORIZED", "Unauthorized")
     }
 
-    const body = await parseJsonBody(request) as {
+    const body = (await parseJsonBody(request)) as {
       filename?: unknown
       mediaType?: unknown
       size?: unknown
@@ -46,10 +46,16 @@ export async function POST(request: NextRequest) {
 
     const normalizedFilename = filename.toLowerCase()
     const allowedExtensions = MIME_EXTENSIONS[mediaType as keyof typeof MIME_EXTENSIONS] ?? []
-    const matchesExtension = allowedExtensions.some((extension) => normalizedFilename.endsWith(extension))
+    const matchesExtension = allowedExtensions.some((extension) =>
+      normalizedFilename.endsWith(extension)
+    )
 
     if (!matchesExtension) {
-      return createErrorResponse(400, "INVALID_UPLOAD_EXTENSION", "File extension does not match the media type.")
+      return createErrorResponse(
+        400,
+        "INVALID_UPLOAD_EXTENSION",
+        "File extension does not match the media type."
+      )
     }
 
     const { token, payload } = issueSignedUploadToken({

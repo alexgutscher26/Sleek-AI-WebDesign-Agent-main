@@ -1,5 +1,5 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server"
+import { clerkMiddleware } from "@clerk/nextjs/server"
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -15,98 +15,98 @@ const CONTENT_SECURITY_POLICY = [
   "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://kudoswall.org https://*.kudoswall.org",
   "worker-src 'self' blob:",
   "upgrade-insecure-requests",
-].join("; ");
+].join("; ")
 
 const applySecurityHeaders = (response: NextResponse) => {
-  response.headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-XSS-Protection", "0");
-  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
-  response.headers.set("X-Permitted-Cross-Domain-Policies", "none");
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  return response;
-};
+  response.headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
+  response.headers.set("X-Content-Type-Options", "nosniff")
+  response.headers.set("X-Frame-Options", "DENY")
+  response.headers.set("X-XSS-Protection", "0")
+  response.headers.set("Cross-Origin-Resource-Policy", "same-origin")
+  response.headers.set("X-Permitted-Cross-Domain-Policies", "none")
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin")
+  response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+  return response
+}
 
 const isSecureRequest = (request: NextRequest) => {
   if (request.nextUrl.protocol === "https:") {
-    return true;
+    return true
   }
 
-  return request.headers.get("x-forwarded-proto") === "https";
-};
+  return request.headers.get("x-forwarded-proto") === "https"
+}
 
 const getSetCookieHeaders = (response: NextResponse) => {
   const headersWithSetCookie = response.headers as Headers & {
-    getSetCookie?: () => string[];
-  };
+    getSetCookie?: () => string[]
+  }
 
   if (typeof headersWithSetCookie.getSetCookie === "function") {
-    return headersWithSetCookie.getSetCookie();
+    return headersWithSetCookie.getSetCookie()
   }
 
-  const raw = response.headers.get("set-cookie");
-  return raw ? [raw] : [];
-};
+  const raw = response.headers.get("set-cookie")
+  return raw ? [raw] : []
+}
 
 const verifySecureCookieSettings = (request: NextRequest, response: NextResponse) => {
-  const cookies = getSetCookieHeaders(response);
+  const cookies = getSetCookieHeaders(response)
   if (cookies.length === 0) {
-    return response;
+    return response
   }
 
-  const warnings: string[] = [];
-  const secureRequest = isSecureRequest(request);
+  const warnings: string[] = []
+  const secureRequest = isSecureRequest(request)
 
   for (const header of cookies) {
-    const [cookiePair, ...attributes] = header.split(";").map((part) => part.trim());
+    const [cookiePair, ...attributes] = header.split(";").map((part) => part.trim())
     if (!cookiePair) {
-      continue;
+      continue
     }
-    const cookieName = cookiePair.split("=")[0] ?? "";
-    const normalizedAttributes = attributes.map((attribute) => attribute.toLowerCase());
-    const isSessionLikeCookie = /^(__session|__clerk|__Secure-|__Host-)/i.test(cookieName);
+    const cookieName = cookiePair.split("=")[0] ?? ""
+    const normalizedAttributes = attributes.map((attribute) => attribute.toLowerCase())
+    const isSessionLikeCookie = /^(__session|__clerk|__Secure-|__Host-)/i.test(cookieName)
 
     if (!isSessionLikeCookie) {
-      continue;
+      continue
     }
 
     if (secureRequest && !normalizedAttributes.includes("secure")) {
-      warnings.push(`${cookieName}: missing Secure`);
+      warnings.push(`${cookieName}: missing Secure`)
     }
 
-    const sameSiteAttribute = normalizedAttributes.find((attribute) => attribute.startsWith("samesite="));
+    const sameSiteAttribute = normalizedAttributes.find((attribute) =>
+      attribute.startsWith("samesite=")
+    )
     if (!sameSiteAttribute) {
-      warnings.push(`${cookieName}: missing SameSite`);
+      warnings.push(`${cookieName}: missing SameSite`)
     }
 
     if (
       /^(__session|__Secure-|__Host-)/i.test(cookieName) &&
       !normalizedAttributes.includes("httponly")
     ) {
-      warnings.push(`${cookieName}: missing HttpOnly`);
+      warnings.push(`${cookieName}: missing HttpOnly`)
     }
   }
 
   if (warnings.length > 0) {
-    console.warn("Cookie security verification failed:", warnings.join(", "));
+    console.warn("Cookie security verification failed:", warnings.join(", "))
   }
 
-  return response;
-};
+  return response
+}
 
 export default clerkMiddleware((_, request) => {
-  const response = NextResponse.next();
-  applySecurityHeaders(response);
-  verifySecureCookieSettings(request, response);
-  return response;
-});
+  const response = NextResponse.next()
+  applySecurityHeaders(response)
+  verifySecureCookieSettings(request, response)
+  return response
+})
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
-};
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+}

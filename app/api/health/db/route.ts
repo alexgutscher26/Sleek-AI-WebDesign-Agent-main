@@ -53,7 +53,7 @@ export async function GET() {
           orphanPages: orphanPageCount,
           orphanMessages: orphanMessageCount,
           emptyHtmlPages: emptyHtmlCount,
-        }
+        },
       },
       { status: isHealthy ? 200 : 500 }
     )
@@ -63,7 +63,7 @@ export async function GET() {
       {
         status: "unhealthy",
         timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : "Database health check failed"
+        error: error instanceof Error ? error.message : "Database health check failed",
       },
       { status: 500 }
     )

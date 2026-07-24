@@ -1,13 +1,14 @@
 "use server"
 
-import { getAuthServer } from "@/lib/insforge-server"
 import { createChatCompletionWithRetries, isProviderUnreachableError } from "@/lib/ai-retry"
-import { UIMessage } from "ai"
-import { parseSlugRouteParams, RequestValidationError } from "@/lib/api-validation"
+import { RequestValidationError, parseSlugRouteParams } from "@/lib/api-validation"
+import { writeAuditLog } from "@/lib/audit-log"
+import { getAuthServer } from "@/lib/insforge-server"
+import { getPlatformConfig, isOllamaBackend } from "@/lib/platform-config"
 import { getOwnedProjectBySlug } from "@/lib/project-access"
 import { assertTrustedServerActionRequest } from "@/lib/request-security"
-import { writeAuditLog } from "@/lib/audit-log"
 import type { PageMetadata, PageType } from "@/types/project"
+import { UIMessage } from "ai"
 
 type CompatClient = Awaited<ReturnType<typeof getAuthServer>>["insforge"]
 
@@ -21,39 +22,55 @@ type CompletionResponse = {
 
 type ProjectPageRecord = Pick<
   PageType,
-  "id" | "name" | "rootStyles" | "htmlContent" | "projectId" | "createdAt" | "updatedAt" | "position" | "metadata"
+  | "id"
+  | "name"
+  | "rootStyles"
+  | "htmlContent"
+  | "projectId"
+  | "createdAt"
+  | "updatedAt"
+  | "position"
+  | "metadata"
 >
 
 export const generateProjectTitle = async (message: string, insforgeClient?: CompatClient) => {
   try {
+    const config = getPlatformConfig()
+    const isOllama = isOllamaBackend()
+    const model = isOllama ? config.ollamaModel : "google/gemini-2.5-flash-lite"
+    const fallbackModels = isOllama ? [] : ["google/gemini-2.5-pro"]
+
     const insforge = insforgeClient ?? (await getAuthServer()).insforge
-    const createCompletion = <T,>(options: Record<string, unknown>) => (
+    const createCompletion = <T>(options: Record<string, unknown>) =>
       insforge.ai.chat.completions.create(
         options as Parameters<typeof insforge.ai.chat.completions.create>[0]
       ) as unknown as Promise<T>
-    )
 
-    const result = await createChatCompletionWithRetries<CompletionResponse>(createCompletion, {
-      model: "google/gemini-2.5-flash-lite",
-      messages: [
-        {
-          role: "system",
-          content: `
+    const result = await createChatCompletionWithRetries<CompletionResponse>(
+      createCompletion,
+      {
+        model,
+        messages: [
+          {
+            role: "system",
+            content: `
     You are an AI assistant that generates very short project names based on the user's prompt.
     - Keep it under 5 words.
     - Capitalize words appropriately.
     - Do not include special characters.
     - Return ONLY the name, nothing else.`,
-        },
-        {
-          role: "user",
-          content: message
-        }
-      ]
-    }, {
-      fallbackModels: ["google/gemini-2.5-pro"]
-    })
-    const text = result.choices[0]?.message?.content ?? "";
+          },
+          {
+            role: "user",
+            content: message,
+          },
+        ],
+      },
+      {
+        fallbackModels,
+      }
+    )
+    const text = result.choices[0]?.message?.content ?? ""
     return text.trim() || "Untitled Project"
   } catch (error) {
     if (isProviderUnreachableError(error)) {
@@ -65,38 +82,34 @@ export const generateProjectTitle = async (message: string, insforgeClient?: Com
   }
 }
 
-
 export const convertModelMessages = async (messages: UIMessage[]) => {
   const modelMessages = messages.map((message: UIMessage) => {
-    const contentParts: Array<
-      | { type: "text"; text: string }
-      | { type: "image"; image: string }
-    > = [];
+    const contentParts: Array<{ type: "text"; text: string } | { type: "image"; image: string }> =
+      []
 
     for (const part of message.parts) {
-      if (part.type === "text" && typeof part.text === "string"
-        && part.text.trim()
-      ) {
+      if (part.type === "text" && typeof part.text === "string" && part.text.trim()) {
         contentParts.push({
           type: "text",
-          text: part.text
+          text: part.text,
         })
       } else if (part.type === "file") {
-        if (part.mediaType?.startsWith('image/') && part.url) {
+        if (part.mediaType?.startsWith("image/") && part.url) {
           contentParts.push({
             type: "image",
-            image: part.url
+            image: part.url,
           })
         }
       }
     }
 
     const firstPart = contentParts[0]
-    const content = contentParts.length === 1 && firstPart?.type === "text" ? firstPart.text : contentParts;
+    const content =
+      contentParts.length === 1 && firstPart?.type === "text" ? firstPart.text : contentParts
 
     return {
       role: message.role,
-      content
+      content,
     }
   })
 
@@ -106,12 +119,12 @@ export const convertModelMessages = async (messages: UIMessage[]) => {
 export const deletePageAction = async (slugId: string, pageId: string) => {
   try {
     const trustedRequest = await assertTrustedServerActionRequest({
-      requireNavigationHeaders: true
+      requireNavigationHeaders: true,
     })
     if (!trustedRequest.ok) return { error: trustedRequest.message }
 
-    const { user, insforge } = await getAuthServer();
-    if (!user) return { error: "Unauthorized" };
+    const { user, insforge } = await getAuthServer()
+    if (!user) return { error: "Unauthorized" }
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
 
     const { data: project } = await getOwnedProjectBySlug<{ id: string }>(
@@ -122,14 +135,11 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
     )
     if (!project) return { error: "Project not found" }
 
-    await insforge.database.from("pages")
-      .delete()
-      .eq("projectId", project.id)
-      .eq("id", pageId)
+    await insforge.database.from("pages").delete().eq("projectId", project.id).eq("id", pageId)
 
     await insforge.database.rpc("rebalance_page_positions", {
       p_user_id: user.id,
-      p_project_id: project.id
+      p_project_id: project.id,
     })
 
     await writeAuditLog({
@@ -139,8 +149,8 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
       entityId: pageId,
       projectId: project.id,
       metadata: {
-        slugId: parsedSlugId
-      }
+        slugId: parsedSlugId,
+      },
     })
 
     return { success: true }
@@ -155,12 +165,12 @@ export const deletePageAction = async (slugId: string, pageId: string) => {
 export const renamePageAction = async (slugId: string, pageId: string, name: string) => {
   try {
     const trustedRequest = await assertTrustedServerActionRequest({
-      requireNavigationHeaders: true
+      requireNavigationHeaders: true,
     })
     if (!trustedRequest.ok) return { error: trustedRequest.message }
 
-    const { user, insforge } = await getAuthServer();
-    if (!user) return { error: "Unauthorized" };
+    const { user, insforge } = await getAuthServer()
+    if (!user) return { error: "Unauthorized" }
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
     const trimmedName = name.trim()
 
@@ -176,7 +186,8 @@ export const renamePageAction = async (slugId: string, pageId: string, name: str
     )
     if (!project) return { error: "Project not found" }
 
-    const { data: page, error } = await insforge.database.from<ProjectPageRecord>("pages")
+    const { data: page, error } = await insforge.database
+      .from<ProjectPageRecord>("pages")
       .update({ name: trimmedName })
       .eq("projectId", project.id)
       .eq("id", pageId)
@@ -195,8 +206,8 @@ export const renamePageAction = async (slugId: string, pageId: string, name: str
       projectId: project.id,
       metadata: {
         slugId: parsedSlugId,
-        nextName: trimmedName
-      }
+        nextName: trimmedName,
+      },
     })
 
     return { success: true, data: page }
@@ -211,12 +222,12 @@ export const renamePageAction = async (slugId: string, pageId: string, name: str
 export const duplicatePageAction = async (slugId: string, pageId: string) => {
   try {
     const trustedRequest = await assertTrustedServerActionRequest({
-      requireNavigationHeaders: true
+      requireNavigationHeaders: true,
     })
     if (!trustedRequest.ok) return { error: trustedRequest.message }
 
-    const { user, insforge } = await getAuthServer();
-    if (!user) return { error: "Unauthorized" };
+    const { user, insforge } = await getAuthServer()
+    if (!user) return { error: "Unauthorized" }
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
 
     const { data: project } = await getOwnedProjectBySlug<{ id: string }>(
@@ -227,7 +238,8 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
     )
     if (!project) return { error: "Project not found" }
 
-    const { data: sourcePage, error: sourceError } = await insforge.database.from<ProjectPageRecord>("pages")
+    const { data: sourcePage, error: sourceError } = await insforge.database
+      .from<ProjectPageRecord>("pages")
       .select("*")
       .eq("projectId", project.id)
       .eq("id", pageId)
@@ -237,7 +249,8 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
       return { error: "Page not found" }
     }
 
-    const { data: siblingPages } = await insforge.database.from<Array<Pick<PageType, "id" | "name">>>("pages")
+    const { data: siblingPages } = await insforge.database
+      .from<Array<Pick<PageType, "id" | "name">>>("pages")
       .select("id, name")
       .eq("projectId", project.id)
       .order("position", { ascending: true })
@@ -256,17 +269,24 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
       rootStyles: sourcePage.rootStyles,
       htmlContent: sourcePage.htmlContent,
       metadata: (sourcePage.metadata ?? {}) as PageMetadata,
-      position: typeof sourcePage.position === "number" ? sourcePage.position + 1 : 0
+      position: typeof sourcePage.position === "number" ? sourcePage.position + 1 : 0,
     }
 
-    let duplicateResponse = await insforge.database.from<ProjectPageRecord>("pages")
+    let duplicateResponse = await insforge.database
+      .from<ProjectPageRecord>("pages")
       .insert([duplicatePayload])
       .select("*")
       .single()
 
-    if (duplicateResponse.error?.message?.toLowerCase().includes(`column "metadata" of relation "pages" does not exist`)) {
-      const { metadata: _metadata, ...legacyPayload } = duplicatePayload
-      duplicateResponse = await insforge.database.from<ProjectPageRecord>("pages")
+    if (
+      duplicateResponse.error?.message
+        ?.toLowerCase()
+        .includes(`column "metadata" of relation "pages" does not exist`)
+    ) {
+      const legacyPayload = { ...duplicatePayload }
+      delete (legacyPayload as { metadata?: unknown }).metadata
+      duplicateResponse = await insforge.database
+        .from<ProjectPageRecord>("pages")
         .insert([legacyPayload])
         .select("*")
         .single()
@@ -286,7 +306,7 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
     await insforge.database.rpc("update_page_positions", {
       p_user_id: user.id,
       p_project_id: project.id,
-      p_page_ids: orderedPageIds
+      p_page_ids: orderedPageIds,
     })
 
     await writeAuditLog({
@@ -299,16 +319,16 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
         slugId: parsedSlugId,
         sourcePageId: pageId,
         sourcePageName: sourcePage.name,
-        duplicatedPageName: duplicatedPage.name
-      }
+        duplicatedPageName: duplicatedPage.name,
+      },
     })
 
     return {
       success: true,
       data: {
         ...duplicatedPage,
-        position: insertAt
-      }
+        position: insertAt,
+      },
     }
   } catch (error) {
     if (error instanceof RequestValidationError) {
@@ -321,12 +341,12 @@ export const duplicatePageAction = async (slugId: string, pageId: string) => {
 export const reorderPagesAction = async (slugId: string, orderedPageIds: string[]) => {
   try {
     const trustedRequest = await assertTrustedServerActionRequest({
-      requireNavigationHeaders: true
+      requireNavigationHeaders: true,
     })
     if (!trustedRequest.ok) return { error: trustedRequest.message }
 
-    const { user, insforge } = await getAuthServer();
-    if (!user) return { error: "Unauthorized" };
+    const { user, insforge } = await getAuthServer()
+    if (!user) return { error: "Unauthorized" }
     const { slugId: parsedSlugId } = parseSlugRouteParams(slugId)
 
     const { data: project } = await getOwnedProjectBySlug<{ id: string }>(
@@ -337,13 +357,14 @@ export const reorderPagesAction = async (slugId: string, orderedPageIds: string[
     )
     if (!project) return { error: "Project not found" }
 
-    const normalizedPageIds = orderedPageIds
-      .filter((pageId) => typeof pageId === "string" && pageId.trim().length > 0)
+    const normalizedPageIds = orderedPageIds.filter(
+      (pageId) => typeof pageId === "string" && pageId.trim().length > 0
+    )
 
     await insforge.database.rpc("update_page_positions", {
       p_user_id: user.id,
       p_project_id: project.id,
-      p_page_ids: normalizedPageIds
+      p_page_ids: normalizedPageIds,
     })
 
     await writeAuditLog({
@@ -354,8 +375,8 @@ export const reorderPagesAction = async (slugId: string, orderedPageIds: string[
       projectId: project.id,
       metadata: {
         slugId: parsedSlugId,
-        orderedPageIds: normalizedPageIds
-      }
+        orderedPageIds: normalizedPageIds,
+      },
     })
 
     return { success: true }

@@ -1,0 +1,161 @@
+name: Dependency Update CI
+
+on:
+  pull_request:
+    branches: [main]
+    # Only run on Dependabot PRs (and manual dep update PRs labelled "dependencies")
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # ── 1. Detect if this is a major version bump ────────────────────────────────
+  detect-major-bump:
+    name: Detect major version bump
+    runs-on: ubuntu-latest
+    outputs:
+      is_major: ${{ steps.check.outputs.is_major }}
+      bumped_packages: ${{ steps.check.outputs.bumped_packages }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for major version bumps in package.json
+        id: check
+        run: |
+          # Compare package.json between base and head
+          git diff origin/${{ github.base_ref }}...HEAD -- package.json > /tmp/pkg_diff.txt
+
+          # Extract lines that changed (+ lines = new, - lines = old)
+          ADDED=$(grep '^+' /tmp/pkg_diff.txt | grep -v '^+++' | sed 's/^+//')
+          REMOVED=$(grep '^-' /tmp/pkg_diff.txt | grep -v '^---' | sed 's/^-//')
+
+          IS_MAJOR="false"
+          BUMPED=""
+
+          while IFS= read -r line; do
+            # Match lines like "    "package": "^X.Y.Z""
+            if echo "$line" | grep -qE '"[^"]+": "\^?[0-9]+\.[0-9]+\.[0-9]+"'; then
+              PKG=$(echo "$line" | grep -oP '"[^"]+(?=": "\^?)' | head -1 | tr -d '"')
+              NEW_VER=$(echo "$ADDED" | grep "\"$PKG\"" | grep -oP '\^?[0-9]+' | head -1)
+              OLD_VER=$(echo "$REMOVED" | grep "\"$PKG\"" | grep -oP '\^?[0-9]+' | head -1)
+
+              if [ -n "$NEW_VER" ] && [ -n "$OLD_VER" ]; then
+                NEW_MAJOR=${NEW_VER//^/}
+                OLD_MAJOR=${OLD_VER//^/}
+                if [ "$NEW_MAJOR" -gt "$OLD_MAJOR" ] 2>/dev/null; then
+                  IS_MAJOR="true"
+                  BUMPED="$BUMPED $PKG($OLD_MAJOR→$NEW_MAJOR)"
+                fi
+              fi
+            fi
+          done <<< "$ADDED"
+
+          echo "is_major=$IS_MAJOR" >> "$GITHUB_OUTPUT"
+          echo "bumped_packages=$BUMPED" >> "$GITHUB_OUTPUT"
+          echo "Major bump detected: $IS_MAJOR — $BUMPED"
+
+  # ── 2. Install & build check (all PRs) ──────────────────────────────────────
+  install-and-build:
+    name: Install & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # Provide stub env vars so Next.js build doesn't fail on missing values
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_stub' }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || 'sk_test_stub' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://stub:stub@localhost/stub' }}
+          OPENAI_BASE_URL: "https://openrouter.ai/api/v1"
+          OPENROUTER_API_KEY: "sk-stub"
+
+  # ── 3. Breaking change gate (major bumps only) ───────────────────────────────
+  breaking-change-gate:
+    name: Breaking change review gate
+    runs-on: ubuntu-latest
+    needs: detect-major-bump
+    if: needs.detect-major-bump.outputs.is_major == 'true'
+    steps:
+      - name: Summarise major bumps
+        run: |
+          echo "⚠️  MAJOR VERSION BUMP DETECTED"
+          echo "Packages: ${{ needs.detect-major-bump.outputs.bumped_packages }}"
+          echo ""
+          echo "Before merging this PR, verify the following for each bumped package:"
+          echo "  1. Read the package CHANGELOG / migration guide."
+          echo "  2. Search the codebase for deprecated APIs removed in this major."
+          echo "  3. Run the full test suite locally."
+          echo "  4. Test on a staging/preview deployment, not just local."
+          echo "  5. Update RUNBOOK.md > §5 env var table if the package changes required config."
+
+      - name: Post PR comment with breaking change checklist
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const packages = `${{ needs.detect-major-bump.outputs.bumped_packages }}`.trim();
+            const body = [
+              '## ⚠️ Major Version Bump — Breaking Change Review Required',
+              '',
+              `**Bumped packages:** \`${packages}\``,
+              '',
+              'This PR contains one or more **major** version bumps. Please complete the checklist before merging:',
+              '',
+              '- [ ] Read the CHANGELOG / migration guide for each bumped package',
+              '- [ ] Search codebase for any APIs removed or renamed in this major version',
+              '- [ ] Verify TypeScript types still compile (`npx tsc --noEmit`)',
+              '- [ ] Confirm lint passes (`npm run lint`)',
+              '- [ ] Confirm production build succeeds (`npm run build`)',
+              '- [ ] Test the critical path (auth → create project → generate page → save) on a preview deployment',
+              '- [ ] Update `.env.example` and `RUNBOOK.md` if new env vars are required',
+              '',
+              '> **Do not merge until all boxes are checked.** Minor/patch updates may be merged without this review.',
+            ].join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail to block auto-merge on major bumps
+        run: |
+          echo "::error::Major version bump requires manual review. See PR comment for checklist."
+          exit 1
+
+  # ── 4. Unused dependency check ───────────────────────────────────────────────
+  depcheck:
+    name: Unused dependency check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run depcheck
+        run: |
+          npx --yes depcheck --version > /dev/null
+          npm run depcheck || true
+        # `|| true` keeps the job non-blocking for now; remove when baseline is clean

@@ -1,0 +1,24 @@
+# Prettier ignore file
+# Matches patterns in .gitignore where possible
+
+# Build outputs
+.next/
+out/
+build/
+
+# Generated / vendored
+node_modules/
+package-lock.json
+bun.lock
+
+# DB schema (SQL formatting handled separately)
+insforge/schema.sql
+insforge/schema_rollback.sql
+
+# Agent config (not application code)
+.agent/
+.agents/
+.claude/
+
+# Public assets
+public/

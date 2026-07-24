@@ -1,5 +1,47 @@
-import { ChatStatus } from "ai";
-import React, { useState } from "react";
+import React, { useState } from "react"
+import { CONTENT_DEPTHS, type ContentDepth, DEFAULT_CONTENT_DEPTH } from "@/constants/content-depth"
+import {
+  CREATIVITY_LEVELS,
+  type CreativityLevel,
+  DEFAULT_CREATIVITY_LEVEL,
+} from "@/constants/creativity-level"
+import {
+  DEFAULT_GENERATION_MODE,
+  GENERATION_MODES,
+  type GenerationMode,
+} from "@/constants/generation-mode"
+import {
+  DEFAULT_GENERATION_PLATFORM,
+  GENERATION_PLATFORMS,
+  type GenerationPlatform,
+} from "@/constants/generation-platform"
+import {
+  DEFAULT_LAYOUT_COMPLEXITY,
+  LAYOUT_COMPLEXITIES,
+  type LayoutComplexity,
+} from "@/constants/layout-complexity"
+import {
+  DEFAULT_MODEL_PROVIDER,
+  MODEL_PROVIDERS,
+  type ModelProvider,
+} from "@/constants/model-provider"
+import {
+  DEFAULT_STYLE_INTENSITY,
+  STYLE_INTENSITIES,
+  type StyleIntensity,
+} from "@/constants/style-intensity"
+import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from "@/lib/request-limits"
+import { PageType } from "@/types/project"
+import { SignInButton, SignUpButton, useAuth } from "@clerk/nextjs"
+import { ChatStatus } from "ai"
+import { ArrowUpIcon, LockIcon, Square, XIcon } from "lucide-react"
+import { toast } from "sonner"
+import {
+  Attachment,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+} from "../ai-elements/attachments"
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -13,50 +55,37 @@ import {
   PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
-} from "../ai-elements/prompt-input";
-import { SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "../ui/item";
-import { ArrowUpIcon, LockIcon, Square, XIcon } from "lucide-react";
-import { Button } from "../ui/button";
-import { Attachment, AttachmentPreview, AttachmentRemove, Attachments } from "../ai-elements/attachments";
-import { PageType } from "@/types/project";
-import { Badge } from "../ui/badge";
-import { ALLOWED_FILE_ACCEPT, MAX_FILE_SIZE_BYTES } from "@/lib/request-limits";
-import { toast } from "sonner";
-import { CONTENT_DEPTHS, DEFAULT_CONTENT_DEPTH, type ContentDepth } from "@/constants/content-depth";
-import { CREATIVITY_LEVELS, DEFAULT_CREATIVITY_LEVEL, type CreativityLevel } from "@/constants/creativity-level";
-import { DEFAULT_GENERATION_PLATFORM, GENERATION_PLATFORMS, type GenerationPlatform } from "@/constants/generation-platform";
-import { DEFAULT_GENERATION_MODE, GENERATION_MODES, type GenerationMode } from "@/constants/generation-mode";
-import { DEFAULT_LAYOUT_COMPLEXITY, LAYOUT_COMPLEXITIES, type LayoutComplexity } from "@/constants/layout-complexity";
-import { DEFAULT_MODEL_PROVIDER, MODEL_PROVIDERS, type ModelProvider } from "@/constants/model-provider";
-import { DEFAULT_STYLE_INTENSITY, STYLE_INTENSITIES, type StyleIntensity } from "@/constants/style-intensity";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+} from "../ai-elements/prompt-input"
+import { Badge } from "../ui/badge"
+import { Button } from "../ui/button"
+import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "../ui/item"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 
 type ChatInputProps = {
-  contentDepth: ContentDepth;
-  creativityLevel: CreativityLevel;
-  generationPlatform: GenerationPlatform;
-  generationMode: GenerationMode;
-  layoutComplexity: LayoutComplexity;
-  modelProvider: ModelProvider;
-  styleIntensity: StyleIntensity;
-  input: string;
-  isLoading: boolean;
-  status: ChatStatus;
-  controlsPosition?: "inside" | "below";
-  selectedPage?: PageType | undefined;
-  setContentDepth: (depth: ContentDepth) => void;
-  setCreativityLevel: (level: CreativityLevel) => void;
-  setGenerationPlatform: (platform: GenerationPlatform) => void;
-  setGenerationMode: (mode: GenerationMode) => void;
-  setLayoutComplexity: (complexity: LayoutComplexity) => void;
-  setModelProvider: (provider: ModelProvider) => void;
-  setStyleIntensity: (intensity: StyleIntensity) => void;
-  setInput: (input: string) => void;
-  onClearSelectedPage: () => void;
-  onStop: () => void;
-  onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void;
-};
+  contentDepth: ContentDepth
+  creativityLevel: CreativityLevel
+  generationPlatform: GenerationPlatform
+  generationMode: GenerationMode
+  layoutComplexity: LayoutComplexity
+  modelProvider: ModelProvider
+  styleIntensity: StyleIntensity
+  input: string
+  isLoading: boolean
+  status: ChatStatus
+  controlsPosition?: "inside" | "below"
+  selectedPage?: PageType | undefined
+  setContentDepth: (depth: ContentDepth) => void
+  setCreativityLevel: (level: CreativityLevel) => void
+  setGenerationPlatform: (platform: GenerationPlatform) => void
+  setGenerationMode: (mode: GenerationMode) => void
+  setLayoutComplexity: (complexity: LayoutComplexity) => void
+  setModelProvider: (provider: ModelProvider) => void
+  setStyleIntensity: (intensity: StyleIntensity) => void
+  setInput: (input: string) => void
+  onClearSelectedPage: () => void
+  onStop: () => void
+  onSubmit: (message: PromptInputMessage, options?: Record<string, unknown>) => void
+}
 
 const ChatInput = ({
   contentDepth,
@@ -83,16 +112,16 @@ const ChatInput = ({
   onStop,
   onSubmit,
 }: ChatInputProps) => {
-  const { isSignedIn } = useAuth();
-  const [showAuthBanner, setShowAuthBanner] = useState(false);
+  const { isSignedIn } = useAuth()
+  const [showAuthBanner, setShowAuthBanner] = useState(false)
 
   const handleSubmit = (message: PromptInputMessage) => {
     if (!isSignedIn) {
-      setShowAuthBanner(true);
-      return;
+      setShowAuthBanner(true)
+      return
     }
 
-    setShowAuthBanner(false);
+    setShowAuthBanner(false)
     onSubmit(message, {
       contentDepth,
       creativityLevel,
@@ -102,26 +131,24 @@ const ChatInput = ({
       modelProvider,
       styleIntensity,
       selectedPageId: selectedPage?.id,
-    });
-    onClearSelectedPage();
-  };
+    })
+    onClearSelectedPage()
+  }
 
   return (
-    <div className="w-full flex flex-col gap-2">
+    <div className="flex w-full flex-col gap-2">
       {showAuthBanner && (
         <Item
           variant="outline"
           size="sm"
-          className="border-amber-200 bg-amber-50 py-2 animate-in fade-in slide-in-from-bottom-2 duration-200 dark:border-amber-800/30 dark:bg-amber-950/40"
+          className="animate-in fade-in slide-in-from-bottom-2 border-amber-200 bg-amber-50 py-2 duration-200 dark:border-amber-800/30 dark:bg-amber-950/40"
         >
           <ItemMedia variant="icon" className="bg-transparent">
             <LockIcon className="size-4" />
           </ItemMedia>
           <ItemContent>
             <ItemTitle className="text-sm">Sign in to continue</ItemTitle>
-            <ItemDescription>
-              Create a free account to start designing with Sleek.
-            </ItemDescription>
+            <ItemDescription>Create a free account to start designing with Sleek.</ItemDescription>
           </ItemContent>
           <ItemActions>
             <SignInButton>
@@ -142,7 +169,7 @@ const ChatInput = ({
       <PromptInput
         accept={ALLOWED_FILE_ACCEPT}
         globalDrop
-        className="rounded-xl! border bg-background shadow-md"
+        className="bg-background rounded-xl! border shadow-md"
         maxFileSize={MAX_FILE_SIZE_BYTES}
         onSubmit={handleSubmit}
         onError={(err) => toast.error(err.message)}
@@ -227,30 +254,30 @@ const ChatInput = ({
           setLayoutComplexity={setLayoutComplexity}
           setModelProvider={setModelProvider}
           setStyleIntensity={setStyleIntensity}
-          className="rounded-[1.5rem] border border-border/60 bg-background/60 p-3 shadow-[0_20px_60px_-42px_rgba(0,0,0,0.85)] backdrop-blur"
+          className="border-border/60 bg-background/60 rounded-[1.5rem] border p-3 shadow-[0_20px_60px_-42px_rgba(0,0,0,0.85)] backdrop-blur"
         />
       ) : null}
     </div>
-  );
-};
+  )
+}
 
 type GenerationControlsProps = {
-  contentDepth: ContentDepth;
-  creativityLevel: CreativityLevel;
-  generationPlatform: GenerationPlatform;
-  generationMode: GenerationMode;
-  layoutComplexity: LayoutComplexity;
-  modelProvider: ModelProvider;
-  styleIntensity: StyleIntensity;
-  setContentDepth: (depth: ContentDepth) => void;
-  setCreativityLevel: (level: CreativityLevel) => void;
-  setGenerationPlatform: (platform: GenerationPlatform) => void;
-  setGenerationMode: (mode: GenerationMode) => void;
-  setLayoutComplexity: (complexity: LayoutComplexity) => void;
-  setModelProvider: (provider: ModelProvider) => void;
-  setStyleIntensity: (intensity: StyleIntensity) => void;
-  className?: string;
-};
+  contentDepth: ContentDepth
+  creativityLevel: CreativityLevel
+  generationPlatform: GenerationPlatform
+  generationMode: GenerationMode
+  layoutComplexity: LayoutComplexity
+  modelProvider: ModelProvider
+  styleIntensity: StyleIntensity
+  setContentDepth: (depth: ContentDepth) => void
+  setCreativityLevel: (level: CreativityLevel) => void
+  setGenerationPlatform: (platform: GenerationPlatform) => void
+  setGenerationMode: (mode: GenerationMode) => void
+  setLayoutComplexity: (complexity: LayoutComplexity) => void
+  setModelProvider: (provider: ModelProvider) => void
+  setStyleIntensity: (intensity: StyleIntensity) => void
+  className?: string
+}
 
 const GenerationControls = ({
   contentDepth,
@@ -269,24 +296,35 @@ const GenerationControls = ({
   setStyleIntensity,
   className,
 }: GenerationControlsProps) => {
-  const selectedContentDepth = CONTENT_DEPTHS.find((level) => level.value === contentDepth);
-  const selectedCreativity = CREATIVITY_LEVELS.find((level) => level.value === creativityLevel);
-  const selectedPlatform = GENERATION_PLATFORMS.find((platform) => platform.value === generationPlatform);
-  const selectedMode = GENERATION_MODES.find((mode) => mode.value === generationMode);
-  const selectedLayoutComplexity = LAYOUT_COMPLEXITIES.find((level) => level.value === layoutComplexity);
-  const selectedProvider = MODEL_PROVIDERS.find((provider) => provider.value === modelProvider);
-  const selectedIntensity = STYLE_INTENSITIES.find((intensity) => intensity.value === styleIntensity);
+  const selectedContentDepth = CONTENT_DEPTHS.find((level) => level.value === contentDepth)
+  const selectedCreativity = CREATIVITY_LEVELS.find((level) => level.value === creativityLevel)
+  const selectedPlatform = GENERATION_PLATFORMS.find(
+    (platform) => platform.value === generationPlatform
+  )
+  const selectedMode = GENERATION_MODES.find((mode) => mode.value === generationMode)
+  const selectedLayoutComplexity = LAYOUT_COMPLEXITIES.find(
+    (level) => level.value === layoutComplexity
+  )
+  const selectedProvider = MODEL_PROVIDERS.find((provider) => provider.value === modelProvider)
+  const selectedIntensity = STYLE_INTENSITIES.find(
+    (intensity) => intensity.value === styleIntensity
+  )
 
   return (
-    <div className={`flex flex-wrap items-start justify-between gap-3 px-2 pt-2 ${className ?? ""}`}>
+    <div
+      className={`flex flex-wrap items-start justify-between gap-3 px-2 pt-2 ${className ?? ""}`}
+    >
       <div className="px-1">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-muted-foreground text-[11px] font-medium tracking-[0.18em] uppercase">
           Generation Controls
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Select value={contentDepth} onValueChange={(value) => setContentDepth(value as ContentDepth)}>
-          <SelectTrigger className="h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs">
+        <Select
+          value={contentDepth}
+          onValueChange={(value) => setContentDepth(value as ContentDepth)}
+        >
+          <SelectTrigger className="border-border/70 bg-muted/30 h-8 max-w-40 min-w-34 rounded-full text-xs">
             <SelectValue placeholder={DEFAULT_CONTENT_DEPTH}>
               {selectedContentDepth?.label ?? DEFAULT_CONTENT_DEPTH}
             </SelectValue>
@@ -296,15 +334,18 @@ const GenerationControls = ({
               <SelectItem key={level.value} value={level.value}>
                 <div className="flex flex-col">
                   <span>{level.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{level.description}</span>
+                  <span className="text-muted-foreground text-[11px]">{level.description}</span>
                 </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={modelProvider} onValueChange={(value) => setModelProvider(value as ModelProvider)}>
-          <SelectTrigger className="h-8 min-w-36 max-w-44 rounded-full border-border/70 bg-muted/30 text-xs">
+        <Select
+          value={modelProvider}
+          onValueChange={(value) => setModelProvider(value as ModelProvider)}
+        >
+          <SelectTrigger className="border-border/70 bg-muted/30 h-8 max-w-44 min-w-36 rounded-full text-xs">
             <SelectValue placeholder={DEFAULT_MODEL_PROVIDER}>
               {selectedProvider?.label ?? DEFAULT_MODEL_PROVIDER}
             </SelectValue>
@@ -314,7 +355,7 @@ const GenerationControls = ({
               <SelectItem key={provider.value} value={provider.value}>
                 <div className="flex flex-col">
                   <span>{provider.label}</span>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-muted-foreground text-[11px]">
                     {provider.latencyHint} · {provider.costHint}
                   </span>
                 </div>
@@ -323,8 +364,11 @@ const GenerationControls = ({
           </SelectContent>
         </Select>
 
-        <Select value={creativityLevel} onValueChange={(value) => setCreativityLevel(value as CreativityLevel)}>
-          <SelectTrigger className="h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs">
+        <Select
+          value={creativityLevel}
+          onValueChange={(value) => setCreativityLevel(value as CreativityLevel)}
+        >
+          <SelectTrigger className="border-border/70 bg-muted/30 h-8 max-w-40 min-w-34 rounded-full text-xs">
             <SelectValue placeholder={DEFAULT_CREATIVITY_LEVEL}>
               {selectedCreativity?.label ?? DEFAULT_CREATIVITY_LEVEL}
             </SelectValue>
@@ -334,15 +378,18 @@ const GenerationControls = ({
               <SelectItem key={level.value} value={level.value}>
                 <div className="flex flex-col">
                   <span>{level.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{level.description}</span>
+                  <span className="text-muted-foreground text-[11px]">{level.description}</span>
                 </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={generationMode} onValueChange={(value) => setGenerationMode(value as GenerationMode)}>
-          <SelectTrigger className="h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs">
+        <Select
+          value={generationMode}
+          onValueChange={(value) => setGenerationMode(value as GenerationMode)}
+        >
+          <SelectTrigger className="border-border/70 bg-muted/30 h-8 max-w-40 min-w-34 rounded-full text-xs">
             <SelectValue placeholder={DEFAULT_GENERATION_MODE}>
               {selectedMode?.label ?? DEFAULT_GENERATION_MODE}
             </SelectValue>
@@ -352,7 +399,7 @@ const GenerationControls = ({
               <SelectItem key={mode.value} value={mode.value}>
                 <div className="flex flex-col">
                   <span>{mode.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{mode.description}</span>
+                  <span className="text-muted-foreground text-[11px]">{mode.description}</span>
                 </div>
               </SelectItem>
             ))}
@@ -364,7 +411,7 @@ const GenerationControls = ({
           onValueChange={(value) => setGenerationPlatform(value as GenerationPlatform)}
           disabled={generationMode !== "mobile-app"}
         >
-          <SelectTrigger className="h-8 min-w-36 max-w-44 rounded-full border-border/70 bg-muted/30 text-xs disabled:opacity-50">
+          <SelectTrigger className="border-border/70 bg-muted/30 h-8 max-w-44 min-w-36 rounded-full text-xs disabled:opacity-50">
             <SelectValue placeholder={DEFAULT_GENERATION_PLATFORM}>
               {selectedPlatform?.label ?? DEFAULT_GENERATION_PLATFORM}
             </SelectValue>
@@ -374,15 +421,18 @@ const GenerationControls = ({
               <SelectItem key={platform.value} value={platform.value}>
                 <div className="flex flex-col">
                   <span>{platform.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{platform.description}</span>
+                  <span className="text-muted-foreground text-[11px]">{platform.description}</span>
                 </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={layoutComplexity} onValueChange={(value) => setLayoutComplexity(value as LayoutComplexity)}>
-          <SelectTrigger className="h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs">
+        <Select
+          value={layoutComplexity}
+          onValueChange={(value) => setLayoutComplexity(value as LayoutComplexity)}
+        >
+          <SelectTrigger className="border-border/70 bg-muted/30 h-8 max-w-40 min-w-34 rounded-full text-xs">
             <SelectValue placeholder={DEFAULT_LAYOUT_COMPLEXITY}>
               {selectedLayoutComplexity?.label ?? DEFAULT_LAYOUT_COMPLEXITY}
             </SelectValue>
@@ -392,15 +442,18 @@ const GenerationControls = ({
               <SelectItem key={level.value} value={level.value}>
                 <div className="flex flex-col">
                   <span>{level.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{level.description}</span>
+                  <span className="text-muted-foreground text-[11px]">{level.description}</span>
                 </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={styleIntensity} onValueChange={(value) => setStyleIntensity(value as StyleIntensity)}>
-          <SelectTrigger className="h-8 min-w-34 max-w-40 rounded-full border-border/70 bg-muted/30 text-xs">
+        <Select
+          value={styleIntensity}
+          onValueChange={(value) => setStyleIntensity(value as StyleIntensity)}
+        >
+          <SelectTrigger className="border-border/70 bg-muted/30 h-8 max-w-40 min-w-34 rounded-full text-xs">
             <SelectValue placeholder={DEFAULT_STYLE_INTENSITY}>
               {selectedIntensity?.label ?? DEFAULT_STYLE_INTENSITY}
             </SelectValue>
@@ -410,7 +463,7 @@ const GenerationControls = ({
               <SelectItem key={intensity.value} value={intensity.value}>
                 <div className="flex flex-col">
                   <span>{intensity.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{intensity.description}</span>
+                  <span className="text-muted-foreground text-[11px]">{intensity.description}</span>
                 </div>
               </SelectItem>
             ))}
@@ -418,13 +471,13 @@ const GenerationControls = ({
         </Select>
       </div>
     </div>
-  );
-};
+  )
+}
 
 const PromptInputAttachmentsDisplay = () => {
-  const attachments = usePromptInputAttachments();
+  const attachments = usePromptInputAttachments()
   if (attachments.files.length === 0) {
-    return null;
+    return null
   }
 
   return (
@@ -444,19 +497,19 @@ const PromptInputAttachmentsDisplay = () => {
         </Attachment>
       ))}
     </Attachments>
-  );
-};
+  )
+}
 
 const StopButton = ({ onStop }: { onStop: () => void }) => {
   return (
     <Button
       size="icon"
-      className="cursor-pointer rounded-full border !bg-muted dark:!bg-black"
+      className="!bg-muted cursor-pointer rounded-full border dark:!bg-black"
       onClick={onStop}
     >
       <Square fill="black" size={14} className="text-black dark:text-white" />
     </Button>
-  );
-};
+  )
+}
 
-export default ChatInput;
+export default ChatInput

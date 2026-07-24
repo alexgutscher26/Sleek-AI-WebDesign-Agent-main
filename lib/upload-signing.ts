@@ -14,17 +14,12 @@ const UPLOAD_SIGNING_SECRET =
   process.env.CLERK_SECRET_KEY ??
   "development-upload-signing-secret"
 
-const toBase64Url = (value: string | Buffer) =>
-  Buffer.from(value)
-    .toString("base64url")
+const toBase64Url = (value: string | Buffer) => Buffer.from(value).toString("base64url")
 
-const fromBase64Url = (value: string) =>
-  Buffer.from(value, "base64url")
+const fromBase64Url = (value: string) => Buffer.from(value, "base64url")
 
 const signPayload = (payload: string) =>
-  createHmac("sha256", UPLOAD_SIGNING_SECRET)
-    .update(payload)
-    .digest()
+  createHmac("sha256", UPLOAD_SIGNING_SECRET).update(payload).digest()
 
 export const issueSignedUploadToken = (input: {
   userId: string

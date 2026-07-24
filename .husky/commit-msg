@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# .husky/commit-msg
+# Validates the commit message against the Conventional Commits spec.
+# Config: commitlint.config.ts
+npx --no -- commitlint --edit "$1"

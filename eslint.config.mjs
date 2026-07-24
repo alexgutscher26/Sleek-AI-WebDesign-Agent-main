@@ -1,8 +1,8 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
-import eslintPluginUnicorn from "eslint-plugin-unicorn";
-import reactHooksPlugin from "eslint-plugin-react-hooks";
+import nextVitals from "eslint-config-next/core-web-vitals"
+import nextTs from "eslint-config-next/typescript"
+import reactHooksPlugin from "eslint-plugin-react-hooks"
+import eslintPluginUnicorn from "eslint-plugin-unicorn"
+import { defineConfig, globalIgnores } from "eslint/config"
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -19,12 +19,7 @@ const eslintConfig = defineConfig([
       "unicorn/filename-case": "off",
     },
   },
-  globalIgnores([
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
-]);
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+])
 
-export default eslintConfig;
+export default eslintConfig

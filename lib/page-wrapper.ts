@@ -1,16 +1,15 @@
-import { BASE_VARIABLES, FONT_VARIABLES } from "./prompt";
-import { sanitizeGeneratedHtml } from "./html-guardrails";
+import { sanitizeGeneratedHtml } from "./html-guardrails"
+import { BASE_VARIABLES, FONT_VARIABLES } from "./prompt"
 
-const escapeHtml = (value: string) => (
+const escapeHtml = (value: string) =>
   value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
-);
 
-const escapeJsString = (value: string) => (
+const escapeJsString = (value: string) =>
   value
     .replace(/\\/g, "\\\\")
     .replace(/'/g, "\\'")
@@ -18,9 +17,8 @@ const escapeJsString = (value: string) => (
     .replace(/\n/g, "\\n")
     .replace(/</g, "\\x3C")
     .replace(/>/g, "\\x3E")
-);
 
-const sanitizeRootStyles = (value: string) => (
+const sanitizeRootStyles = (value: string) =>
   value
     .split(";")
     .map((declaration) => declaration.trim())
@@ -29,18 +27,18 @@ const sanitizeRootStyles = (value: string) => (
     .filter((match): match is RegExpMatchArray => Boolean(match))
     .map(([, token, rawValue]) => ({
       token,
-      value: (rawValue ?? "").trim()
+      value: (rawValue ?? "").trim(),
     }))
-    .filter(({ value }) => (
-      !/[<>{}`]/.test(value)
-      && !/@import/i.test(value)
-      && !/expression\s*\(/i.test(value)
-      && !/javascript:/i.test(value)
-      && !/url\s*\(\s*['"]?\s*javascript:/i.test(value)
-    ))
+    .filter(
+      ({ value }) =>
+        !/[<>{}`]/.test(value) &&
+        !/@import/i.test(value) &&
+        !/expression\s*\(/i.test(value) &&
+        !/javascript:/i.test(value) &&
+        !/url\s*\(\s*['"]?\s*javascript:/i.test(value)
+    )
     .map(({ token, value: styleValue }) => `--${token}: ${styleValue}`)
     .join("; ")
-);
 
 export function getHTMLWrapper(
   htmlContent: string,
@@ -63,7 +61,7 @@ export function getHTMLWrapper(
     .replace(
       /<section([^>]*)class="([^"]*)\bmin-h-screen\b([^"]*)"([^>]*)>/gi,
       '<section$1class="$2$3"$4>'
-    );
+    )
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -114,5 +112,5 @@ export function getHTMLWrapper(
     })();
   </script>
 </body>
-</html>`;
+</html>`
 }
