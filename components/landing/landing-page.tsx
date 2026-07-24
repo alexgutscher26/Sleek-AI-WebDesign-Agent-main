@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, Play, Plus, Minus, Twitter, Linkedin, Github, ArrowRight, Zap, Palette, Clock, ArrowUp, RefreshCw } from "lucide-react";
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useAuth, SignUpButton as SignUpTrigger } from "@clerk/nextjs";
+import { UserProjectsSection } from "@/components/landing/user-projects-section";
 
 // ── Control option definitions ────────────────────────────────────────────────
 const CONTENT_DEPTH_OPTS = [
@@ -250,6 +251,11 @@ export default function LandingPage() {
             <span className="text-sm font-semibold tracking-tight">Sleek<span className="text-orange-500">.</span></span>
           </Link>
           <div className="hidden md:flex items-center gap-7 text-sm text-white/50">
+            <SignedIn>
+              <a href="#projects" className="text-orange-400 font-medium hover:text-orange-300 transition-colors flex items-center gap-1">
+                <span>Projects</span>
+              </a>
+            </SignedIn>
             {["Features", "Templates", "Pricing", "Changelog", "Blog"].map((l) => (
               <Link key={l} href="#" className="hover:text-white transition-colors">{l}</Link>
             ))}
@@ -265,7 +271,7 @@ export default function LandingPage() {
             </SignedOut>
             <SignedIn>
               <UserButton afterSignOutUrl="/" />
-              <Link href="/project" className="text-sm bg-orange-500 hover:bg-orange-400 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">Dashboard</Link>
+              <Link href="/project" className="text-sm bg-orange-500 hover:bg-orange-400 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">New Project</Link>
             </SignedIn>
           </div>
         </div>
@@ -412,6 +418,11 @@ export default function LandingPage() {
 
         </div>
       </section>
+
+      {/* USER PROJECTS SECTION FOR SIGNED-IN USERS */}
+      <SignedIn>
+        <UserProjectsSection />
+      </SignedIn>
 
       {/* KUDOSWALL SOCIAL PROOF WIDGET */}
       <section className="relative z-10 max-w-5xl mx-auto px-6 py-16">
