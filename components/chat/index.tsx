@@ -978,6 +978,7 @@ const ChatInterface = ({ isProjectPage = false, slugId: propSlugId }: PropsType)
             onBack={handleBack}
             saveStatus={saveStatus}
             lastSaved={lastSaved}
+            pages={pages}
           />
 
           <SectionErrorBoundary sectionName="Chat Panel">
