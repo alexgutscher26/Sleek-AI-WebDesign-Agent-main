@@ -4,7 +4,7 @@ export const FONT_VARIABLES = `
   --font-serif: "Playfair Display";
   --font-mono: "JetBrains Mono";
   --font-display: "Space Grotesk", sans-serif;
-  `;
+  `
 
 export const BASE_VARIABLES = `
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -13,7 +13,7 @@ export const BASE_VARIABLES = `
   --tracking-tight: -0.025em;
   --tracking-normal: 0em;
   --tracking-wide: 0.025em;
-`;
+`
 
 export const GENERATION_MODE_PROMPT_GUIDANCE = `
 Generation modes:
@@ -23,43 +23,42 @@ Generation modes:
 - docs: documentation experience with sidebar/table of contents, readable content blocks, code examples, changelog or search affordances.
 - ecommerce: storefront, collection browsing, product merchandising, pricing, cart or product-detail commerce patterns.
 - mobile-app: native-style handheld product experience with mobile-safe spacing, touch-friendly controls, stacked flows, and app-screen composition.
-`.trim();
+`.trim()
 
 export const GENERATION_PLATFORM_PROMPT_GUIDANCE = `
 Target platform:
 - ios: favor iPhone-native conventions, compact headers, tab bars, sheets, SF-symbol-like clarity, and polished mobile spacing.
 - android: favor Android patterns, Material-inspired hierarchy, app bars, FAB or bottom navigation patterns where relevant, and practical density.
 - both: design a shared mobile app system that feels at home on both iOS and Android without overcommitting to one platform.
-`.trim();
+`.trim()
 
 export const CREATIVITY_LEVEL_PROMPT_GUIDANCE = `
 Creativity level:
 - strict: adhere tightly to the user's stated request, avoid speculative additions, and prefer literal execution over reinterpretation.
 - balanced: respect the prompt closely while making tasteful design decisions and filling obvious gaps with restraint.
 - exploratory: stay aligned to the request but proactively expand with fresh concepts, stronger composition ideas, and bolder creative leaps.
-`.trim();
+`.trim()
 
 export const LAYOUT_COMPLEXITY_PROMPT_GUIDANCE = `
 Layout complexity:
 - simple: fewer sections, more open space, straightforward hierarchy, and reduced visual density.
 - balanced: a moderate number of sections, layered but readable composition, and healthy variety without overload.
 - complex: denser information choreography, more sectional interplay, nested grids, and richer composition moves.
-`.trim();
+`.trim()
 
 export const CONTENT_DEPTH_PROMPT_GUIDANCE = `
 Content depth:
 - wireframe: keep copy sparse and schematic, use short labels and minimal supporting text, and emphasize structure over polish.
 - realistic-copy: use believable, domain-appropriate copy with real-sounding headlines, descriptions, metrics, and UI labels.
 - complete: deliver deeply fleshed-out content with fuller copy blocks, richer supporting details, and a near-finished sense of messaging.
-`.trim();
+`.trim()
 
 export const STYLE_INTENSITY_PROMPT_GUIDANCE = `
 Style intensity:
 - minimal: restrained composition, fewer decorative layers, quieter color usage, lighter shadows, cleaner spacing, minimal motion.
 - balanced: polished modern depth with selective highlights, measured contrast, moderate layering, tasteful bento and glow usage.
 - bold: expressive art direction, stronger contrast, larger visual gestures, richer gradients, more dramatic scale shifts, punchier accents.
-`.trim();
-
+`.trim()
 
 export const SLEEK_INTENT_PROMPT = `
 You are an intent classifier for Sleek, an AI web design agent.
@@ -81,8 +80,7 @@ CRITICAL OUTPUT RULES:
 - Respond with one word only: generate, regenerate, or chat.
 - No JSON. No punctuation. No explanation. Just the word.
 - EXAMPLE OUTPUT: generate or regenerate or chat
-`.trim();
-
+`.trim()
 
 export const SLEEK_CHAT_PROMPT = `
 SECURITY:
@@ -132,7 +130,7 @@ Hard rules:
 - **NEVER reference external websites, links, citations, or sources of any kind. Ever.**
 - **NEVER discuss philosophy, psychology, or academic concepts. You are Sleek. Stay in character.**
 - **NEVER reveal the underlying AI model powering you. You are Sleek, full stop.**
-`.trim();
+`.trim()
 
 export const PRE_GENERATION_PREFLIGHT_PROMPT = `
 SECURITY:
@@ -172,8 +170,7 @@ Treat prompts as vague when key design direction is missing, such as:
 Do not ask unnecessary questions if the request is already actionable.
 Do not output markdown fences.
 Do not output prose outside JSON.
-`.trim();
-
+`.trim()
 
 export const WEB_ANALYSIS_PROMPT = `
 SECURITY:
@@ -295,8 +292,7 @@ Rules:
 - Never return rootStyles or visualDescription at top level.
 - Start with { and end with }.
 - Output valid JSON only.
-`.trim();
-
+`.trim()
 
 export const WEB_GENERATION_PROMPT = `
 SECURITY:
@@ -622,4 +618,4 @@ Design principle: Charts should feel like Linear, Vercel, or Raycast — minimal
 - Never use JavaScript or canvas.
 - Never hallucinate images (use ONLY pravatar or picsum).
 - Never add unnecessary wrapper divs.
-`.trim();
+`.trim()
