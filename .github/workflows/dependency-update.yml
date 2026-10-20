@@ -105,7 +105,7 @@ jobs:
           echo "  5. Update RUNBOOK.md > §5 env var table if the package changes required config."
 
       - name: Post PR comment with breaking change checklist
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const packages = `${{ needs.detect-major-bump.outputs.bumped_packages }}`.trim();
