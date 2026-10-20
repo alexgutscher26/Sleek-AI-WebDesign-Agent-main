@@ -15,7 +15,7 @@ jobs:
       is_major: ${{ steps.check.outputs.is_major }}
       bumped_packages: ${{ steps.check.outputs.bumped_packages }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
@@ -59,7 +59,7 @@ jobs:
     name: Install & build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -144,7 +144,7 @@ jobs:
     name: Unused dependency check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
